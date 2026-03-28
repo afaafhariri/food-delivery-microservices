@@ -1,0 +1,4 @@
+.claude/
+.vscode/
+delivery-service/vendor/
+order-service/vendor/

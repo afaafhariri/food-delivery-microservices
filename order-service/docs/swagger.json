@@ -1,0 +1,10 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "QuickBite Order Service API",
+        "title": "Order Service API",
+        "version": "1.0"
+    },
+    "basePath": "/api",
+    "paths": {}
+}

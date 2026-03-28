@@ -1,0 +1,10 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API for managing deliveries and drivers in QuickBite",
+        "title": "Delivery Service API",
+        "version": "1.0"
+    },
+    "basePath": "/api",
+    "paths": {}
+}

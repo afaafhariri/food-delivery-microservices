@@ -1,0 +1,132 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-restaurants-table
+      author: quickbite
+      changes:
+        - createTable:
+            tableName: restaurants
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: address
+                  type: varchar(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: cuisine_type
+                  type: varchar(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: operating_hours
+                  type: varchar(255)
+              - column:
+                  name: active
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_restaurants_cuisine_type
+            tableName: restaurants
+            columns:
+              - column:
+                  name: cuisine_type
+        - createIndex:
+            indexName: idx_restaurants_active
+            tableName: restaurants
+            columns:
+              - column:
+                  name: active
+
+  - changeSet:
+      id: 001-create-menu-items-table
+      author: quickbite
+      changes:
+        - createTable:
+            tableName: menu_items
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  defaultValueComputed: gen_random_uuid()
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: restaurant_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: text
+              - column:
+                  name: price
+                  type: decimal(10,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category
+                  type: varchar(100)
+              - column:
+                  name: available
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: menu_items
+            baseColumnNames: restaurant_id
+            referencedTableName: restaurants
+            referencedColumnNames: id
+            constraintName: fk_menu_items_restaurant
+            onDelete: CASCADE
+        - createIndex:
+            indexName: idx_menu_items_restaurant_id
+            tableName: menu_items
+            columns:
+              - column:
+                  name: restaurant_id
+        - createIndex:
+            indexName: idx_menu_items_category
+            tableName: menu_items
+            columns:
+              - column:
+                  name: category

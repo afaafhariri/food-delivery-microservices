@@ -1,0 +1,7 @@
+basePath: /api
+info:
+  description: QuickBite Order Service API
+  title: Order Service API
+  version: "1.0"
+paths: {}
+swagger: "2.0"
