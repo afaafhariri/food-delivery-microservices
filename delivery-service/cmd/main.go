@@ -30,7 +30,7 @@ import (
 // @title Delivery Service API
 // @version 1.0
 // @description API for managing deliveries and drivers in QuickBite
-// @BasePath /api
+// @BasePath /
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 

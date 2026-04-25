@@ -3,8 +3,433 @@
     "info": {
         "description": "API for managing deliveries and drivers in QuickBite",
         "title": "Delivery Service API",
+        "contact": {},
         "version": "1.0"
     },
-    "basePath": "/api",
-    "paths": {}
+    "basePath": "/",
+    "paths": {
+        "/api/deliveries": {
+            "get": {
+                "description": "List all deliveries with optional filters",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deliveries"
+                ],
+                "summary": "List all deliveries",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by driver ID",
+                        "name": "driver_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.DeliveryResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/deliveries/order/{orderId}": {
+            "get": {
+                "description": "Get delivery details by order ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deliveries"
+                ],
+                "summary": "Get delivery by order ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Order ID",
+                        "name": "orderId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DeliveryResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/deliveries/{id}": {
+            "get": {
+                "description": "Get delivery details by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deliveries"
+                ],
+                "summary": "Get a delivery by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DeliveryResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/deliveries/{id}/status": {
+            "patch": {
+                "description": "Update the status of a delivery",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deliveries"
+                ],
+                "summary": "Update delivery status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status update data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateDeliveryStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DeliveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/drivers": {
+            "get": {
+                "description": "List all drivers with optional availability filter",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "drivers"
+                ],
+                "summary": "List all drivers",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Filter by availability",
+                        "name": "available",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.DriverResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Register a new delivery driver",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "drivers"
+                ],
+                "summary": "Register a new driver",
+                "parameters": [
+                    {
+                        "description": "Driver registration data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateDriverRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DriverResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/drivers/{id}": {
+            "put": {
+                "description": "Update driver information",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "drivers"
+                ],
+                "summary": "Update a driver",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Driver ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Driver update data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateDriverRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DriverResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dto.CreateDriverRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+1234567890"
+                },
+                "vehicle_type": {
+                    "type": "string",
+                    "example": "motorcycle"
+                }
+            }
+        },
+        "dto.DeliveryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "driver": {
+                    "$ref": "#/definitions/dto.DriverResponse"
+                },
+                "driver_id": {
+                    "type": "string",
+                    "example": "770e8400-e29b-41d4-a716-446655440000"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "order_id": {
+                    "type": "string",
+                    "example": "660e8400-e29b-41d4-a716-446655440000"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ASSIGNED"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.DriverResponse": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+1234567890"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "vehicle_type": {
+                    "type": "string",
+                    "example": "motorcycle"
+                }
+            }
+        },
+        "dto.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "resource not found"
+                },
+                "status": {
+                    "type": "integer",
+                    "example": 404
+                }
+            }
+        },
+        "dto.UpdateDeliveryStatusRequest": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "PICKED_UP"
+                }
+            }
+        },
+        "dto.UpdateDriverRequest": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+1234567890"
+                },
+                "vehicle_type": {
+                    "type": "string",
+                    "example": "motorcycle"
+                }
+            }
+        }
+    }
 }

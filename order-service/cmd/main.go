@@ -1,7 +1,7 @@
 // @title       Order Service API
 // @version     1.0
 // @description QuickBite Order Service API
-// @BasePath    /api
+// @BasePath    /
 
 package main
 

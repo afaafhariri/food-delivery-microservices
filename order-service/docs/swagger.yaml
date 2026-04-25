@@ -1,7 +1,251 @@
-basePath: /api
+basePath: /
+definitions:
+  dto.CreateOrderRequest:
+    properties:
+      customer_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      delivery_address:
+        example: 123 Main St, City
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dto.OrderItemRequest'
+        type: array
+      restaurant_id:
+        example: 660e8400-e29b-41d4-a716-446655440000
+        type: string
+    type: object
+  dto.ErrorResponse:
+    properties:
+      message:
+        example: something went wrong
+        type: string
+      status:
+        example: 400
+        type: integer
+    type: object
+  dto.OrderItemRequest:
+    properties:
+      menu_item_id:
+        example: 770e8400-e29b-41d4-a716-446655440000
+        type: string
+      menu_item_name:
+        example: Margherita Pizza
+        type: string
+      quantity:
+        example: 2
+        type: integer
+      unit_price:
+        example: 12.99
+        type: number
+    type: object
+  dto.OrderItemResponse:
+    properties:
+      id:
+        type: string
+      menu_item_id:
+        type: string
+      menu_item_name:
+        type: string
+      order_id:
+        type: string
+      quantity:
+        type: integer
+      unit_price:
+        type: number
+    type: object
+  dto.OrderResponse:
+    properties:
+      created_at:
+        type: string
+      customer_id:
+        type: string
+      delivery_address:
+        type: string
+      id:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/dto.OrderItemResponse'
+        type: array
+      restaurant_id:
+        type: string
+      status:
+        type: string
+      total_amount:
+        type: number
+      updated_at:
+        type: string
+    type: object
+  dto.UpdateStatusRequest:
+    properties:
+      status:
+        example: CONFIRMED
+        type: string
+    type: object
 info:
+  contact: {}
   description: QuickBite Order Service API
   title: Order Service API
   version: "1.0"
-paths: {}
+paths:
+  /api/orders:
+    get:
+      description: List orders with optional filters and pagination
+      parameters:
+      - description: Customer ID filter
+        in: query
+        name: customer_id
+        type: string
+      - description: Status filter
+        in: query
+        name: status
+        type: string
+      - description: Start date filter (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: End date filter (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List orders
+      tags:
+      - orders
+    post:
+      consumes:
+      - application/json
+      description: Create a new order with items
+      parameters:
+      - description: Order creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateOrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Create a new order
+      tags:
+      - orders
+  /api/orders/{id}:
+    delete:
+      description: Cancel an order (only if status is PLACED)
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Cancel an order
+      tags:
+      - orders
+    get:
+      description: Get a specific order by its ID
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.OrderResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get order by ID
+      tags:
+      - orders
+  /api/orders/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: Update the status of an existing order
+      parameters:
+      - description: Order ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update order status
+      tags:
+      - orders
 swagger: "2.0"

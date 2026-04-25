@@ -1,7 +1,291 @@
-basePath: /api
+basePath: /
+definitions:
+  dto.CreateDriverRequest:
+    properties:
+      name:
+        example: John Doe
+        type: string
+      phone:
+        example: "+1234567890"
+        type: string
+      vehicle_type:
+        example: motorcycle
+        type: string
+    type: object
+  dto.DeliveryResponse:
+    properties:
+      created_at:
+        type: string
+      driver:
+        $ref: '#/definitions/dto.DriverResponse'
+      driver_id:
+        example: 770e8400-e29b-41d4-a716-446655440000
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      order_id:
+        example: 660e8400-e29b-41d4-a716-446655440000
+        type: string
+      status:
+        example: ASSIGNED
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.DriverResponse:
+    properties:
+      available:
+        example: true
+        type: boolean
+      created_at:
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: John Doe
+        type: string
+      phone:
+        example: "+1234567890"
+        type: string
+      updated_at:
+        type: string
+      vehicle_type:
+        example: motorcycle
+        type: string
+    type: object
+  dto.ErrorResponse:
+    properties:
+      message:
+        example: resource not found
+        type: string
+      status:
+        example: 404
+        type: integer
+    type: object
+  dto.UpdateDeliveryStatusRequest:
+    properties:
+      status:
+        example: PICKED_UP
+        type: string
+    type: object
+  dto.UpdateDriverRequest:
+    properties:
+      available:
+        example: true
+        type: boolean
+      name:
+        example: John Doe
+        type: string
+      phone:
+        example: "+1234567890"
+        type: string
+      vehicle_type:
+        example: motorcycle
+        type: string
+    type: object
 info:
+  contact: {}
   description: API for managing deliveries and drivers in QuickBite
   title: Delivery Service API
   version: "1.0"
-paths: {}
+paths:
+  /api/deliveries:
+    get:
+      description: List all deliveries with optional filters
+      parameters:
+      - description: Filter by driver ID
+        in: query
+        name: driver_id
+        type: string
+      - description: Filter by status
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.DeliveryResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List all deliveries
+      tags:
+      - deliveries
+  /api/deliveries/{id}:
+    get:
+      description: Get delivery details by ID
+      parameters:
+      - description: Delivery ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DeliveryResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get a delivery by ID
+      tags:
+      - deliveries
+  /api/deliveries/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: Update the status of a delivery
+      parameters:
+      - description: Delivery ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateDeliveryStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DeliveryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update delivery status
+      tags:
+      - deliveries
+  /api/deliveries/order/{orderId}:
+    get:
+      description: Get delivery details by order ID
+      parameters:
+      - description: Order ID
+        in: path
+        name: orderId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DeliveryResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get delivery by order ID
+      tags:
+      - deliveries
+  /api/drivers:
+    get:
+      description: List all drivers with optional availability filter
+      parameters:
+      - description: Filter by availability
+        in: query
+        name: available
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.DriverResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List all drivers
+      tags:
+      - drivers
+    post:
+      consumes:
+      - application/json
+      description: Register a new delivery driver
+      parameters:
+      - description: Driver registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateDriverRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.DriverResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Register a new driver
+      tags:
+      - drivers
+  /api/drivers/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update driver information
+      parameters:
+      - description: Driver ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Driver update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateDriverRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DriverResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update a driver
+      tags:
+      - drivers
 swagger: "2.0"
