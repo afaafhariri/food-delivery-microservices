@@ -2,3 +2,4 @@
 .vscode/
 delivery-service/vendor/
 order-service/vendor/
+.DS_Store
