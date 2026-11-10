@@ -1,0 +1,27 @@
+# JVM flags shared by every QuickBite service. Passed as a java @argfile so the
+# AOT training run (docker build) and the runtime always use identical flags -
+# a mismatch would make the JVM silently ignore the AOT cache.
+#
+# Extra flags at deploy time: set JDK_JAVA_OPTIONS (read by the java launcher).
+
+# GC: lowest footprint/overhead for small heaps on 1-2 CPUs.
+-XX:+UseSerialGC
+
+# Heap sized from the container memory limit. 40% headroom is left for
+# metaspace (~100 MB for a Spring app), JIT code cache, thread stacks, GC data
+# and direct buffers, so RSS stays under the cgroup limit (no OOM-kill).
+-XX:MaxRAMPercentage=60
+-XX:InitialRAMPercentage=30
+-XX:MaxDirectMemorySize=64m
+
+# JEP 519: 8-byte object headers -> 10-20% smaller live heap.
+-XX:+UseCompactObjectHeaders
+
+# Crash fast on OOM; the container runtime restarts us in a clean state.
+-XX:+ExitOnOutOfMemoryError
+
+# No /tmp/hsperfdata mmap: less RSS, works with a read-only root filesystem.
+-XX:-UsePerfData
+
+-Duser.timezone=UTC
+-Djava.io.tmpdir=/tmp

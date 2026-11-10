@@ -1,7 +1,7 @@
 package com.quickbite.restaurant.kafka;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -33,7 +33,7 @@ public class OrderResponseProducer {
             String message = objectMapper.writeValueAsString(payload);
             kafkaTemplate.send(TOPIC, orderId.toString(), message);
             log.info("Published order response: orderId={}, status={}", orderId, status);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.error("Failed to serialize order response", e);
         }
     }

@@ -1,0 +1,16 @@
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/customer/v1/CustomerDirectoryGrpc.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/customer/v1/CustomerDirectoryOuterClass.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/customer/v1/ResolveCustomerRequest.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/customer/v1/ResolveCustomerRequestOrBuilder.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/customer/v1/ResolveCustomerResponse.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/customer/v1/ResolveCustomerResponseOrBuilder.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/Catalog.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/PricedLine.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/PricedLineOrBuilder.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/QuoteLine.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/QuoteLineOrBuilder.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/QuoteOrderRequest.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/QuoteOrderRequestOrBuilder.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/QuoteOrderResponse.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/QuoteOrderResponseOrBuilder.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf/com/quickbite/grpc/restaurant/v1/RestaurantCatalogGrpc.java

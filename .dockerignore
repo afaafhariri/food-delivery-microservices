@@ -1,0 +1,12 @@
+# Build context is the repo root (Maven reactor). Send only what the build needs.
+**/target/
+**/.idea/
+**/*.iml
+**/.vscode/
+**/.DS_Store
+.git/
+.claude/
+docs/
+scripts/
+docker-compose*.yml
+**/README.md

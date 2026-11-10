@@ -1,0 +1,4 @@
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/api-gateway/src/main/java/com/quickbite/gateway/GatewayApplication.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/api-gateway/src/main/java/com/quickbite/gateway/config/CorsConfig.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/api-gateway/src/main/java/com/quickbite/gateway/config/RouteConfig.java
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/api-gateway/src/main/java/com/quickbite/gateway/filter/LoggingFilter.java

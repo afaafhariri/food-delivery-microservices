@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package quickbite.restaurant.v1;
+
+option java_multiple_files = true;
+option java_package = "com.quickbite.grpc.restaurant.v1";
+
+// Authoritative menu & pricing lookups, served by restaurant-service.
+service RestaurantCatalog {
+  // Validates that the restaurant is active and every item is on its menu and
+  // available, then prices the order server-side.
+  //
+  // Errors:
+  //   INVALID_ARGUMENT    malformed ids, empty item list, quantity < 1
+  //   NOT_FOUND           restaurant missing or inactive
+  //   FAILED_PRECONDITION item not on this restaurant's menu, or unavailable
+  rpc QuoteOrder(QuoteOrderRequest) returns (QuoteOrderResponse);
+}
+
+message QuoteOrderRequest {
+  string restaurant_id = 1;
+  repeated QuoteLine items = 2;
+}
+
+message QuoteLine {
+  string menu_item_id = 1;
+  int32 quantity = 2;
+}
+
+message QuoteOrderResponse {
+  string restaurant_id = 1;
+  string restaurant_name = 2;
+  repeated PricedLine items = 3;
+  // All monetary values are integer minor units (e.g. cents) to avoid float rounding.
+  int64 total_minor = 4;
+}
+
+message PricedLine {
+  string menu_item_id = 1;
+  string name = 2;
+  int32 quantity = 3;
+  int64 unit_price_minor = 4;
+  int64 line_total_minor = 5;
+}

@@ -1,9 +1,52 @@
-services:
-  # ──────────────────────────────────────
-  # Infrastructure
-  # ──────────────────────────────────────
+name: quickbite
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Shared building blocks
+# ──────────────────────────────────────────────────────────────────────────────
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Every JVM service: one Dockerfile, hardened runtime, readiness health check.
+x-jvm-service: &jvm-service
+  restart: unless-stopped
+  read_only: true                     # immutable container; only /tmp is writable
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 30s              # Spring graceful shutdown + Kafka/gRPC drain
+  logging: *logging
+  healthcheck:
+    test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${SERVER_PORT}/actuator/health/readiness >/dev/null || exit 1"]
+    interval: 10s
+    timeout: 3s
+    retries: 6
+    start_period: 30s
+
+x-jvm-build: &jvm-build
+  context: .
+  dockerfile: docker/jvm.Dockerfile
+
+x-backing-services: &backing-services
   postgres:
-    image: postgres:16-alpine
+    condition: service_healthy
+  kafka:
+    condition: service_healthy
+
+x-common-env: &common-env
+  SPRING_DATASOURCE_USERNAME: quickbite
+  SPRING_DATASOURCE_PASSWORD: quickbite123
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+services:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Infrastructure
+  # ────────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine           # major version kept: existing volumes stay compatible
     container_name: quickbite-postgres
     environment:
       POSTGRES_USER: quickbite
@@ -13,181 +56,157 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    shm_size: 128m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quickbite -d postgres"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging: *logging
     restart: unless-stopped
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    container_name: quickbite-zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
+  # Single-node KRaft broker (no ZooKeeper container).
   kafka:
-    image: confluentinc/cp-kafka:7.6.0
+    image: apache/kafka:4.1.2
     container_name: quickbite-kafka
-    depends_on:
-      zookeeper:
-        condition: service_healthy
     ports:
       - "29092:29092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      CLUSTER_ID: 7h5VZmJLSU6SipeLOZBikw
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx256m"
+      KAFKA_JVM_PERFORMANCE_OPTS: "-XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -XX:-UsePerfData -Djava.awt.headless=true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-    restart: unless-stopped
-
-  # ──────────────────────────────────────
-  # Microservices
-  # ──────────────────────────────────────
-  restaurant-service:
-    build:
-      context: ./restaurant-service
-      dockerfile: Dockerfile
-    container_name: quickbite-restaurant-service
-    ports:
-      - "8081:8081"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quickbite_restaurant_db
-      SPRING_DATASOURCE_USERNAME: quickbite
-      SPRING_DATASOURCE_PASSWORD: quickbite123
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SERVER_PORT: 8081
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+      # Port probe instead of the kafka-*.sh tools: those spawn a second JVM
+      # inside the memory-limited container on every check.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 9092"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     deploy:
       resources:
         limits:
           memory: 512M
+    logging: *logging
     restart: unless-stopped
 
-  order-service:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Microservices
+  # ────────────────────────────────────────────────────────────────────────────
+  restaurant-service:
+    <<: *jvm-service
+    image: quickbite/restaurant-service:latest
     build:
-      context: ./order-service
-      dockerfile: Dockerfile
+      <<: *jvm-build
+      args: { SERVICE: restaurant-service }
+    container_name: quickbite-restaurant-service
+    ports:
+      - "8081:8081"                     # REST; gRPC 9091 stays on the internal network
+    environment:
+      <<: *common-env
+      SERVER_PORT: 8081
+      GRPC_PORT: 9091
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quickbite_restaurant_db
+    depends_on: *backing-services
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  customer-service:
+    <<: *jvm-service
+    image: quickbite/customer-service:latest
+    build:
+      <<: *jvm-build
+      args: { SERVICE: customer-service }
+    container_name: quickbite-customer-service
+    ports:
+      - "8084:8084"                     # REST; gRPC 9094 stays on the internal network
+    environment:
+      <<: *common-env
+      SERVER_PORT: 8084
+      GRPC_PORT: 9094
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quickbite_customer_db
+    depends_on: *backing-services
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  order-service:
+    <<: *jvm-service
+    image: quickbite/order-service:latest
+    build:
+      <<: *jvm-build
+      args: { SERVICE: order-service }
     container_name: quickbite-order-service
     ports:
       - "8082:8082"
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: quickbite_order_db
-      DB_USER: quickbite
-      DB_PASSWORD: quickbite123
-      KAFKA_BROKERS: kafka:9092
+      <<: *common-env
       SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quickbite_order_db?reWriteBatchedInserts=true
+      RESTAURANT_GRPC_ADDRESS: static://restaurant-service:9091
+      CUSTOMER_GRPC_ADDRESS: static://customer-service:9094
+      GRPC_DEADLINE: 2s
     depends_on:
-      postgres:
+      <<: *backing-services
+      restaurant-service:
         condition: service_healthy
-      kafka:
+      customer-service:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     deploy:
       resources:
         limits:
-          memory: 128M
-    restart: unless-stopped
+          memory: 384M
 
   delivery-service:
+    <<: *jvm-service
+    image: quickbite/delivery-service:latest
     build:
-      context: ./delivery-service
-      dockerfile: Dockerfile
+      <<: *jvm-build
+      args: { SERVICE: delivery-service }
     container_name: quickbite-delivery-service
     ports:
       - "8083:8083"
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: quickbite_delivery_db
-      DB_USER: quickbite
-      DB_PASSWORD: quickbite123
-      KAFKA_BROKERS: kafka:9092
+      <<: *common-env
       SERVER_PORT: 8083
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quickbite_delivery_db?reWriteBatchedInserts=true
+    depends_on: *backing-services
     deploy:
       resources:
         limits:
-          memory: 128M
-    restart: unless-stopped
-
-  customer-service:
-    build:
-      context: ./customer-service
-      dockerfile: Dockerfile
-    container_name: quickbite-customer-service
-    ports:
-      - "8084:8084"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/quickbite_customer_db
-      SPRING_DATASOURCE_USERNAME: quickbite
-      SPRING_DATASOURCE_PASSWORD: quickbite123
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      SERVER_PORT: 8084
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/actuator/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    restart: unless-stopped
+          memory: 352M
 
   api-gateway:
+    <<: *jvm-service
+    image: quickbite/api-gateway:latest
     build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
+      <<: *jvm-build
+      args: { SERVICE: api-gateway }
     container_name: quickbite-api-gateway
     ports:
       - "8080:8080"
@@ -206,17 +225,11 @@ services:
         condition: service_healthy
       customer-service:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
     deploy:
       resources:
         limits:
           memory: 256M
-    restart: unless-stopped
 
 volumes:
   postgres-data:
+  kafka-data:

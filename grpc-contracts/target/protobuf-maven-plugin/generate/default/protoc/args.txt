@@ -1,0 +1,9 @@
+--java_out=/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf
+--plugin=protoc-gen-0_3667abd790aab84be24ad3846d09463a7784bbe5=/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/protobuf-maven-plugin/generate/default/artifacts/protoc-gen-grpc-java-014194c2182e71ec1afe0758a4445dd8706859ca.exe
+--0_3667abd790aab84be24ad3846d09463a7784bbe5_out=/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/generated-sources/protobuf
+--0_3667abd790aab84be24ad3846d09463a7784bbe5_opt=@generated=omit
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/src/main/proto/quickbite/restaurant/v1/catalog.proto
+/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/src/main/proto/quickbite/customer/v1/customer_directory.proto
+--proto_path=/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/src/main/proto
+--proto_path=/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/protobuf-maven-plugin/generate/default/archives/protobuf-java-3.25.8-587dc29a489154415c2d0ecfc07412489d57917b
+--proto_path=/Users/afaafhariri/Developer/Projects/food-delivery-microservices/grpc-contracts/target/protobuf-maven-plugin/generate/default/archives/proto-google-common-protos-2.59.2-f15c357596701ff55b8c9b98819cd59212cfb8df

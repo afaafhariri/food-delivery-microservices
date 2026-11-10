@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package quickbite.customer.v1;
+
+option java_multiple_files = true;
+option java_package = "com.quickbite.grpc.customer.v1";
+
+// Customer identity & saved-address lookups, served by customer-service.
+service CustomerDirectory {
+  // Confirms the customer exists and is active. When address_id is set, also
+  // resolves that saved address (it must belong to the customer).
+  //
+  // Errors:
+  //   INVALID_ARGUMENT    malformed ids
+  //   NOT_FOUND           customer missing, or address not owned by customer
+  //   FAILED_PRECONDITION customer is deactivated
+  rpc ResolveCustomer(ResolveCustomerRequest) returns (ResolveCustomerResponse);
+}
+
+message ResolveCustomerRequest {
+  string customer_id = 1;
+  // Optional saved address to deliver to.
+  string address_id = 2;
+}
+
+message ResolveCustomerResponse {
+  string customer_id = 1;
+  string name = 2;
+  string email = 3;
+  // Formatted single-line address; empty when no address_id was requested.
+  string delivery_address = 4;
+}

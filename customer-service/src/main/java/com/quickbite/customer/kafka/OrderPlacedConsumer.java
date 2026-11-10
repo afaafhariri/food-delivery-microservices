@@ -1,15 +1,17 @@
 package com.quickbite.customer.kafka;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.quickbite.customer.model.OrderHistory;
 import com.quickbite.customer.service.OrderHistoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Component
@@ -28,15 +30,15 @@ public class OrderPlacedConsumer {
 
             JsonNode json = objectMapper.readTree(message);
 
-            UUID customerId = UUID.fromString(json.get("customerId").asText());
-            UUID orderId = UUID.fromString(json.get("orderId").asText());
-            UUID restaurantId = json.has("restaurantId") && !json.get("restaurantId").isNull()
-                    ? UUID.fromString(json.get("restaurantId").asText())
+            UUID customerId = UUID.fromString(json.get("customerId").asString());
+            UUID orderId = UUID.fromString(json.get("orderId").asString());
+            UUID restaurantId = json.hasNonNull("restaurantId")
+                    ? UUID.fromString(json.get("restaurantId").asString())
                     : null;
-            String deliveryAddress = json.has("deliveryAddress") ? json.get("deliveryAddress").asText() : null;
-            LocalDateTime orderDate = json.has("orderDate")
-                    ? LocalDateTime.parse(json.get("orderDate").asText())
-                    : LocalDateTime.now();
+            String deliveryAddress = json.hasNonNull("deliveryAddress") ? json.get("deliveryAddress").asString() : null;
+            LocalDateTime orderDate = json.hasNonNull("timestamp")
+                    ? LocalDateTime.ofInstant(Instant.parse(json.get("timestamp").asString()), ZoneOffset.UTC)
+                    : LocalDateTime.now(ZoneOffset.UTC);
 
             OrderHistory orderHistory = OrderHistory.builder()
                     .customerId(customerId)

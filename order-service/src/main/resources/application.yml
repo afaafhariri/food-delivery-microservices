@@ -1,0 +1,67 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: order-service
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/quickbite_order_db?reWriteBatchedInserts=true}
+    username: ${SPRING_DATASOURCE_USERNAME:quickbite}
+    password: ${SPRING_DATASOURCE_PASSWORD:quickbite123}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50
+          time_zone: UTC
+        order_inserts: true
+        order_updates: true
+        default_batch_fetch_size: 64
+        query:
+          in_clause_parameter_padding: true
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+    consumer:
+      auto-offset-reset: earliest
+  grpc:
+    client:
+      channels:
+        restaurant:
+          address: ${RESTAURANT_GRPC_ADDRESS:static://localhost:9091}
+          idle-timeout: 10m
+        customer:
+          address: ${CUSTOMER_GRPC_ADDRESS:static://localhost:9094}
+          idle-timeout: 10m
+
+quickbite:
+  grpc:
+    deadline: ${GRPC_DEADLINE:2s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
