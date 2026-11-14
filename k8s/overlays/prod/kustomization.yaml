@@ -1,0 +1,57 @@
+# Production: images from GitHub Container Registry (built by
+# .github/workflows/images.yml), the password from a git-ignored file,
+# an Ingress with TLS, and network policies.
+#
+#   cp k8s/overlays/prod/secrets.env.example k8s/overlays/prod/secrets.env   # then set a real password
+#   kubectl apply -k k8s/overlays/prod
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quickbite # also places the Secret generated below
+
+resources:
+  - ../../base
+  - ingress.yaml
+  - network-policy.yaml
+
+secretGenerator:
+  - name: quickbite-db
+    envs:
+      - secrets.env # git-ignored; copy secrets.env.example
+
+# For reproducible deploys and easy rollbacks, replace "latest" with the
+# sha-<commit> tag the workflow pushes, e.g. newTag: sha-d0ac9fa
+images:
+  - name: quickbite/api-gateway
+    newName: ghcr.io/afaafhariri/quickbite-api-gateway
+    newTag: latest
+  - name: quickbite/restaurant-service
+    newName: ghcr.io/afaafhariri/quickbite-restaurant-service
+    newTag: latest
+  - name: quickbite/order-service
+    newName: ghcr.io/afaafhariri/quickbite-order-service
+    newTag: latest
+  - name: quickbite/delivery-service
+    newName: ghcr.io/afaafhariri/quickbite-delivery-service
+    newTag: latest
+  - name: quickbite/customer-service
+    newName: ghcr.io/afaafhariri/quickbite-customer-service
+    newTag: latest
+
+patches:
+  # With a moving "latest" tag, pull on every pod start so
+  # `kubectl -n quickbite rollout restart deployment` picks up new images.
+  # Remove this once you pin sha-<commit> tags above.
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: any
+      spec:
+        template:
+          spec:
+            containers:
+              - name: app
+                imagePullPolicy: Always

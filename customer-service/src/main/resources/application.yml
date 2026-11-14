@@ -15,7 +15,7 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/quickbite_customer_db}
     username: ${SPRING_DATASOURCE_USERNAME:quickbite}
-    password: ${SPRING_DATASOURCE_PASSWORD:quickbite123}
+    password: ${SPRING_DATASOURCE_PASSWORD} # no default: a known fallback password must never be used silently
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2

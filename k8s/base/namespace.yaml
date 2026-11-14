@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quickbite
+  labels:
+    # Every pod is written to the "restricted" Pod Security profile. It is
+    # enforced at "baseline" and only warned about at "restricted", so a
+    # cluster quirk shows up as a warning on apply instead of a missing pod.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

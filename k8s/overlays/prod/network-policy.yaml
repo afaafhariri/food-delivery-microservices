@@ -1,0 +1,45 @@
+# Only the gateway accepts traffic from outside the namespace. Postgres, Kafka
+# and the four services (REST and gRPC) are reachable only from pods in the
+# quickbite namespace. Enforced only by CNIs that support NetworkPolicy
+# (k3s, Calico, Cilium, the GKE/EKS/AKS policy add-ons).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: same-namespace-only
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-public
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+---
+# cert-manager answers Let's Encrypt's HTTP-01 challenge with a temporary solver
+# pod in this namespace; the ingress controller (in another namespace) must
+# reach it, or certificates are never issued.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acme-http01-solver
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 8089
+          protocol: TCP

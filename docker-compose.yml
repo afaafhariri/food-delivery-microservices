@@ -53,7 +53,9 @@ services:
       POSTGRES_PASSWORD: quickbite123
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      # Every published port is bound to 127.0.0.1: reachable from this machine
+      # only, never from the rest of the network (the dev password is public).
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
@@ -75,7 +77,7 @@ services:
     image: apache/kafka:4.1.2
     container_name: quickbite-kafka
     ports:
-      - "29092:29092"
+      - "127.0.0.1:29092:29092"
     environment:
       CLUSTER_ID: 7h5VZmJLSU6SipeLOZBikw
       KAFKA_NODE_ID: 1
@@ -123,7 +125,7 @@ services:
       args: { SERVICE: restaurant-service }
     container_name: quickbite-restaurant-service
     ports:
-      - "8081:8081"                     # REST; gRPC 9091 stays on the internal network
+      - "127.0.0.1:8081:8081"                     # REST; gRPC 9091 stays on the internal network
     environment:
       <<: *common-env
       SERVER_PORT: 8081
@@ -143,7 +145,7 @@ services:
       args: { SERVICE: customer-service }
     container_name: quickbite-customer-service
     ports:
-      - "8084:8084"                     # REST; gRPC 9094 stays on the internal network
+      - "127.0.0.1:8084:8084"                     # REST; gRPC 9094 stays on the internal network
     environment:
       <<: *common-env
       SERVER_PORT: 8084
@@ -163,7 +165,7 @@ services:
       args: { SERVICE: order-service }
     container_name: quickbite-order-service
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     environment:
       <<: *common-env
       SERVER_PORT: 8082
@@ -190,7 +192,7 @@ services:
       args: { SERVICE: delivery-service }
     container_name: quickbite-delivery-service
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     environment:
       <<: *common-env
       SERVER_PORT: 8083
@@ -209,7 +211,7 @@ services:
       args: { SERVICE: api-gateway }
     container_name: quickbite-api-gateway
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       SERVER_PORT: 8080
       RESTAURANT_SERVICE_URL: http://restaurant-service:8081

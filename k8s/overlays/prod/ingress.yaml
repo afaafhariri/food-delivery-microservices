@@ -1,0 +1,31 @@
+# Public HTTPS entry point -> api-gateway.
+# 1. Replace quickbite.example.com with your domain (an A record to the node /
+#    load balancer IP).
+# 2. ingressClassName: "traefik" is the k3s default. Change it to match your
+#    cluster's ingress controller (`kubectl get ingressclass`).
+# 3. TLS certificates come from cert-manager with a ClusterIssuer named
+#    "letsencrypt" (see the Kubernetes section of README.md). Without it, the
+#    controller serves its self-signed default certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - quickbite.example.com
+      secretName: api-gateway-tls
+  rules:
+    - host: quickbite.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  name: http

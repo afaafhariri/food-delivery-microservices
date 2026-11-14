@@ -1,0 +1,108 @@
+# REST :8083. Consumes order.placed, assigns a driver, publishes delivery.status.updated
+apiVersion: v1
+kind: Service
+metadata:
+  name: delivery-service
+  labels:
+    app.kubernetes.io/name: delivery-service
+spec:
+  selector:
+    app.kubernetes.io/name: delivery-service
+  ports:
+    - name: http
+      port: 8083
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delivery-service
+  labels:
+    app.kubernetes.io/name: delivery-service
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: delivery-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: delivery-service
+        app.kubernetes.io/component: backend
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001 # "app" user baked into docker/jvm.Dockerfile
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 40 # Spring graceful shutdown + Kafka/gRPC drain
+      initContainers:
+        # Liquibase runs at startup and needs the database. Waiting here keeps
+        # the app out of CrashLoopBackOff while Postgres and Kafka come up.
+        - name: wait-for-deps
+          image: quickbite/delivery-service:latest
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c, 'until nc -z -w 2 postgres 5432 && nc -z -w 2 kafka 9092; do echo "waiting for postgres and kafka"; sleep 2; done']
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 32Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: app
+          image: quickbite/delivery-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8083
+          envFrom:
+            - configMapRef:
+                name: quickbite-common
+          env:
+            - { name: SERVER_PORT, value: "8083" }
+            - { name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://postgres:5432/quickbite_delivery_db?reWriteBatchedInserts=true" }
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef: { name: quickbite-db, key: username }
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: quickbite-db, key: password }
+          resources:
+            requests: { cpu: 100m, memory: 352Mi }
+            limits: { memory: 352Mi } # heap = 60% of this (docker/jvm.options)
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+          lifecycle:
+            preStop: # let endpoint removal propagate before Spring stops accepting
+              exec:
+                command: [sleep, "5"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp # the root filesystem is read-only
+          emptyDir:
+            sizeLimit: 64Mi

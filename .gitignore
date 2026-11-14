@@ -3,6 +3,12 @@
 delivery-service/vendor/
 order-service/vendor/
 .idea/
-.DS_Storetarget/
+.DS_Store
+target/
 *.iml
-.idea/
+
+# Kubernetes production secrets (copy from secrets.env.example)
+k8s/overlays/prod/secrets.env
+
+# Generated on the cloud VM by k8s/vm/deploy.sh
+k8s/overlays/cloud/

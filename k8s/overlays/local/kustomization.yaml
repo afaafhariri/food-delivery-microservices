@@ -1,0 +1,64 @@
+# Local cluster (Docker Desktop Kubernetes, k3d, kind, minikube).
+# Uses the images built by `docker compose build` (quickbite/<service>:latest)
+# and the same development password as docker-compose.yml, and reserves less
+# memory so the stack fits a 4 GB Docker Desktop VM.
+#   kubectl apply -k k8s/overlays/local
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quickbite # also places the Secret generated below
+
+resources:
+  - ../../base
+
+secretGenerator:
+  - name: quickbite-db
+    literals:
+      - username=quickbite
+      - password=quickbite123 # development only, same as docker-compose.yml
+
+patches:
+  # Docker Desktop and k3s map LoadBalancer Services to localhost / the node
+  # IP, so the gateway answers on http://localhost:8080. Elsewhere, use
+  # `kubectl -n quickbite port-forward svc/api-gateway 8080:8080`.
+  - target:
+      kind: Service
+      name: api-gateway
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: LoadBalancer
+
+  # Fit a 4 GB Docker Desktop VM. The scheduler places pods by their memory
+  # *requests*; the base sets requests = limits (about 2.6 GiB in total), which
+  # leaves no room for Kubernetes' own pods on a small node. Here the pods
+  # reserve about 1.7 GiB but keep the same limits, so no container can grow
+  # past its cap. Steady-state usage is about 2.2 GiB.
+  - target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/component=backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+  - target:
+      kind: Deployment
+      name: api-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 192Mi
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 128Mi
+  - target:
+      kind: StatefulSet
+      name: kafka
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 384Mi

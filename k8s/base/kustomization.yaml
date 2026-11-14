@@ -1,0 +1,33 @@
+# QuickBite on Kubernetes: everything that is the same in every environment.
+# Do not apply this directory directly. Use an overlay, which adds the
+# `quickbite-db` Secret and environment-specific settings:
+#   kubectl apply -k k8s/overlays/local
+#   kubectl apply -k k8s/overlays/prod
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quickbite
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: quickbite
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - kafka.yaml
+  - restaurant-service.yaml
+  - customer-service.yaml
+  - order-service.yaml
+  - delivery-service.yaml
+  - api-gateway.yaml
+
+configMapGenerator:
+  # Settings shared by every JVM service.
+  - name: quickbite-common
+    literals:
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+  # Run once by the Postgres entrypoint on an empty data volume.
+  - name: postgres-init
+    files:
+      - 01-init-databases.sql=postgres-init/init-databases.sql
