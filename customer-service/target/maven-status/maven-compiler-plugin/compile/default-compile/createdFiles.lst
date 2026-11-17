@@ -1,3 +1,0 @@
-com/quickbite/customer/config/GrpcServerConfig.class
-com/quickbite/customer/grpc/CustomerDirectoryGrpcService.class
-com/quickbite/customer/grpc/CustomerLookupService.class

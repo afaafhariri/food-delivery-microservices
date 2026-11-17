@@ -1,3 +1,0 @@
-com/quickbite/restaurant/config/GrpcServerConfig.class
-com/quickbite/restaurant/grpc/RestaurantCatalogGrpcService.class
-com/quickbite/restaurant/grpc/OrderQuoteService.class
