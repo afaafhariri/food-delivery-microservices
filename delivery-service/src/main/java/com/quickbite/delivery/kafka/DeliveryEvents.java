@@ -20,8 +20,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Kafka edge of the delivery service: consumes {@code order.placed}, emits
- * {@code delivery.status.updated} through the transactional outbox.
+ * Kafka edge of the delivery service: consumes {@code order.placed} and
+ * {@code order.cancelled}, emits {@code delivery.status.updated} through the transactional outbox.
  */
 @Slf4j
 @Component
@@ -37,6 +37,9 @@ public class DeliveryEvents {
     private final ObjectMapper json;
 
     record OrderPlacedEvent(UUID orderId) {
+    }
+
+    record OrderCancelledEvent(UUID orderId, String reason) {
     }
 
     /** Wire format unchanged from the Go producer. */
@@ -63,6 +66,26 @@ public class DeliveryEvents {
             throw new NonRetryableEventException("order.placed event missing orderId: " + record.value());
         }
         deliveries.assign(event.orderId());
+    }
+
+    /** Frees the driver of a cancelled order (see {@link DeliveryService#cancelForOrder}). */
+    @Transactional
+    @KafkaListener(topics = "order.cancelled", groupId = GROUP)
+    public void onOrderCancelled(ConsumerRecord<String, String> record) {
+        if (!inbox.firstDelivery(GROUP, EventHeaders.eventId(record))) {
+            return;
+        }
+        OrderCancelledEvent event;
+        try {
+            event = json.readValue(record.value(), OrderCancelledEvent.class);
+        } catch (JacksonException | IllegalArgumentException e) {
+            throw new NonRetryableEventException("malformed order.cancelled payload: " + record.value(), e);
+        }
+        if (event.orderId() == null) {
+            throw new NonRetryableEventException("order.cancelled event missing orderId: " + record.value());
+        }
+        log.info("order {} cancelled ({})", event.orderId(), event.reason());
+        deliveries.cancelForOrder(event.orderId());
     }
 
     /** Runs synchronously inside the transaction that changed the delivery. */

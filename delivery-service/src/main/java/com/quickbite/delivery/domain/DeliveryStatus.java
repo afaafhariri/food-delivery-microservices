@@ -3,7 +3,7 @@ package com.quickbite.delivery.domain;
 import java.util.Optional;
 
 public enum DeliveryStatus {
-    ASSIGNED, PICKED_UP, EN_ROUTE, DELIVERED;
+    ASSIGNED, PICKED_UP, EN_ROUTE, DELIVERED, CANCELLED;
 
     public static Optional<DeliveryStatus> parse(String value) {
         if (value == null) {

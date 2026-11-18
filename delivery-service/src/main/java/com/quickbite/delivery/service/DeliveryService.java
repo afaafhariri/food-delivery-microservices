@@ -1,5 +1,7 @@
 package com.quickbite.delivery.service;
 
+import com.quickbite.delivery.domain.CancelledOrder;
+import com.quickbite.delivery.domain.CancelledOrderRepository;
 import com.quickbite.delivery.domain.Delivery;
 import com.quickbite.delivery.domain.DeliveryRepository;
 import com.quickbite.delivery.domain.DeliveryStatus;
@@ -28,6 +30,7 @@ public class DeliveryService {
 
     private final DeliveryRepository deliveries;
     private final DriverRepository drivers;
+    private final CancelledOrderRepository cancelledOrders;
     private final ApplicationEventPublisher events;
 
     /**
@@ -38,6 +41,10 @@ public class DeliveryService {
     public Optional<Delivery> assign(UUID orderId) {
         if (deliveries.existsByOrderId(orderId)) {
             log.info("delivery already exists for order {}, skipping", orderId);
+            return Optional.empty();
+        }
+        if (cancelledOrders.existsById(orderId)) {
+            log.info("order {} was cancelled before it reached delivery, not assigning a driver", orderId);
             return Optional.empty();
         }
         Optional<Driver> next = drivers.lockNextAvailable();
@@ -58,6 +65,41 @@ public class DeliveryService {
                 DeliveryStatus.ASSIGNED.name()));
         log.info("delivery {} assigned order={} driver={}", delivery.getId(), orderId, driver.getId());
         return Optional.of(delivery);
+    }
+
+    /**
+     * Handles {@code order.cancelled}. An ASSIGNED delivery is cancelled and its driver freed
+     * (announced as {@code delivery.status.updated} CANCELLED). A delivery that is already
+     * picked up, en route or delivered is left alone: the food is on its way. Idempotent.
+     */
+    @Transactional
+    public void cancelForOrder(UUID orderId) {
+        if (!cancelledOrders.existsById(orderId)) {
+            cancelledOrders.save(new CancelledOrder(orderId));
+        }
+        Optional<Delivery> found = deliveries.findByOrderId(orderId);
+        if (found.isEmpty()) {
+            log.info("order {} cancelled before a delivery was created", orderId);
+            return;
+        }
+        Delivery delivery = found.get();
+        switch (delivery.getStatus()) {
+            case ASSIGNED -> {
+                Driver driver = delivery.getDriver();
+                delivery.setStatus(DeliveryStatus.CANCELLED);
+                if (driver != null) {
+                    driver.setAvailable(true);
+                }
+                deliveries.saveAndFlush(delivery);
+                events.publishEvent(new DeliveryStatusChanged(delivery.getId(), orderId,
+                        driver != null ? driver.getId() : null, DeliveryStatus.CANCELLED.name()));
+                log.info("delivery {} cancelled with order {}, driver {} is available again", delivery.getId(),
+                        orderId, driver != null ? driver.getId() : null);
+            }
+            case CANCELLED -> log.info("delivery {} already cancelled", delivery.getId());
+            default -> log.warn("order {} cancelled but delivery {} is already {}; leaving it",
+                    orderId, delivery.getId(), delivery.getStatus());
+        }
     }
 
     @Transactional(readOnly = true)
@@ -103,10 +145,13 @@ public class DeliveryService {
                 .orElseThrow(() -> ApiException.badRequest("invalid delivery status: " + rawStatus));
         Delivery delivery = deliveries.findWithDriverById(id)
                 .orElseThrow(() -> ApiException.notFound("delivery not found"));
+        if (delivery.getStatus() == DeliveryStatus.CANCELLED) {
+            throw ApiException.badRequest("delivery was cancelled");
+        }
 
         delivery.setStatus(status);
         Driver driver = delivery.getDriver();
-        if (status == DeliveryStatus.DELIVERED && driver != null) {
+        if ((status == DeliveryStatus.DELIVERED || status == DeliveryStatus.CANCELLED) && driver != null) {
             driver.setAvailable(true);
         }
         deliveries.saveAndFlush(delivery);

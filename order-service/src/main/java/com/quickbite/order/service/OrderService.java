@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -127,7 +128,11 @@ public class OrderService {
         OrderStatus status = OrderStatus.parse(rawStatus)
                 .orElseThrow(() -> ApiException.badRequest("invalid status: " + rawStatus));
         Order order = load(id);
-        order.setStatus(status);
+        if (status == OrderStatus.CANCELLED) {
+            markCancelled(order, "status set to CANCELLED");
+        } else {
+            order.setStatus(status);
+        }
         return toResponse(repository.saveAndFlush(order));
     }
 
@@ -138,8 +143,42 @@ public class OrderService {
             throw ApiException.badRequest(
                     "order can only be cancelled when status is PLACED, current status: " + order.getStatus());
         }
-        order.setStatus(OrderStatus.CANCELLED);
+        markCancelled(order, "cancelled by customer");
         return toResponse(repository.saveAndFlush(order));
+    }
+
+    /**
+     * The restaurant rejected the order ({@code restaurant.order.response}). Delivered or
+     * already-cancelled orders are left alone.
+     *
+     * @return false if the order does not exist
+     */
+    @Transactional
+    public boolean cancelByRestaurant(UUID id, String reason) {
+        Optional<Order> found = repository.findById(id);
+        if (found.isEmpty()) {
+            return false;
+        }
+        Order order = found.get();
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            log.warn("restaurant rejected order {} after it was delivered; ignoring", id);
+        } else {
+            markCancelled(order, reason == null || reason.isBlank() ? "rejected by restaurant" : reason);
+        }
+        return true;
+    }
+
+    /**
+     * The one place an order becomes CANCELLED: {@code order.cancelled} is written to the
+     * outbox in the same transaction, once per order (repeated cancels publish nothing).
+     */
+    private void markCancelled(Order order, String reason) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        events.publishEvent(new OrderCancelled(order, reason));
+        log.info("order {} cancelled: {}", order.getId(), reason);
     }
 
     private Order load(UUID id) {

@@ -2,6 +2,7 @@
 # End-to-end smoke test through the API gateway:
 #   REST -> order-service -> gRPC (restaurant + customer) -> Postgres -> Kafka
 #   -> delivery-service (driver assignment) -> Kafka -> order-service (status sync)
+#   and cancellation: order.cancelled -> delivery cancelled, driver available again
 #
 # Usage: scripts/smoke-test.sh [gateway-url]     (requires curl + jq)
 set -euo pipefail
@@ -95,10 +96,22 @@ call PATCH "/api/deliveries/$delivery/status" '{"status":"DELIVERED"}'
 expect 200 "delivery -> DELIVERED"
 wait_for "/api/orders/$order" .status DELIVERED "order-service mirrored DELIVERED"
 
-step "5. REST contract"
+step "5. Cancellation: order.cancelled frees the driver"
+call POST /api/orders '{"customer_id":"'"$customer"'","restaurant_id":"'"$restaurant"'","address_id":"'"$address"'","items":[{"menu_item_id":"'"$kottu"'","quantity":1}]}'
+expect 201 "place a second order"
+order2=$(jq -r .id <<<"$body")
+wait_for "/api/deliveries/order/$order2" .status ASSIGNED "driver assigned to the second order"
+driver2=$(jq -r .driver_id <<<"$body")
+call DELETE "/api/orders/$order2"
+expect 200 "cancel the second order"
+[[ "$(jq -r .status <<<"$body")" == "CANCELLED" ]] && ok "order is CANCELLED" || bad "cancel: $body"
+wait_for "/api/deliveries/order/$order2" .status CANCELLED "delivery-service cancelled the delivery"
+wait_for "/api/drivers?available=true" "map(select(.id == \"$driver2\")) | length" 1 "the driver is available again"
+
+step "6. REST contract"
 call GET "/api/orders?customer_id=$customer&page=1&size=5"
 expect 200 "list orders"
-[[ "$(jq -r .total <<<"$body")" == "1" ]] && ok "filtered list has 1 order" || bad "list: $body"
+[[ "$(jq -r .total <<<"$body")" == "2" ]] && ok "filtered list has the customer's 2 orders" || bad "list: $body"
 call DELETE "/api/orders/$order"
 expect 400 "cancel after delivery is refused"
 call GET /api/orders/00000000-0000-0000-0000-000000000000
