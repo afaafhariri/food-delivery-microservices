@@ -36,6 +36,8 @@ management:
     health:
       probes:
         enabled: true
+    gateway:
+      access: read-only                        # route table visible, no route changes via actuator
   metrics:
     tags:
       application: ${spring.application.name}   # one label to filter every metric by service
@@ -52,8 +54,6 @@ management:
   # Spans are exported over OTLP only when MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT
   # is set (Compose and the Kubernetes observability component set it), so local runs
   # without a tracing backend stay quiet.
-    gateway:
-      access: read-only
 
 logging:
   level:
