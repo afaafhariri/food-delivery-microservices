@@ -1,24 +1,38 @@
 package com.quickbite.order.kafka;
 
+import com.quickbite.messaging.EventHeaders;
+import com.quickbite.messaging.Inbox;
+import com.quickbite.messaging.NonRetryableEventException;
 import com.quickbite.order.domain.OrderRepository;
 import com.quickbite.order.domain.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.UUID;
 
-/** Applies status changes announced by delivery-service and restaurant-service. */
+/**
+ * Applies status changes announced by delivery-service and restaurant-service.
+ * <p>
+ * Each listener runs in one transaction with its inbox entry, so a redelivered event is
+ * skipped and a failed one is retried (then sent to {@code <topic>.DLT}). Malformed events
+ * go to the DLT immediately.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class OrderStatusListeners {
 
+    static final String GROUP = "order-service-group";
+
     private final OrderRepository repository;
+    private final Inbox inbox;
     private final ObjectMapper json;
 
     record DeliveryStatusEvent(UUID orderId, String status) {
@@ -27,11 +41,15 @@ public class OrderStatusListeners {
     record RestaurantResponseEvent(UUID orderId, String status, String reason) {
     }
 
-    @KafkaListener(topics = "delivery.status.updated", groupId = "order-service-group")
-    public void onDeliveryStatus(String payload) {
-        DeliveryStatusEvent event = parse(payload, DeliveryStatusEvent.class);
-        if (event == null || event.orderId() == null || event.status() == null) {
+    @Transactional
+    @KafkaListener(topics = "delivery.status.updated", groupId = GROUP)
+    public void onDeliveryStatus(ConsumerRecord<String, String> record) {
+        if (!inbox.firstDelivery(GROUP, EventHeaders.eventId(record))) {
             return;
+        }
+        DeliveryStatusEvent event = parse(record.value(), DeliveryStatusEvent.class);
+        if (event.orderId() == null || event.status() == null) {
+            throw new NonRetryableEventException("delivery.status.updated without orderId or status: " + record.value());
         }
         // Delivery has its own lifecycle; only states that exist on an order are mirrored.
         OrderStatus mapped = switch (event.status()) {
@@ -44,11 +62,15 @@ public class OrderStatusListeners {
         }
     }
 
-    @KafkaListener(topics = "restaurant.order.response", groupId = "order-service-group")
-    public void onRestaurantResponse(String payload) {
-        RestaurantResponseEvent event = parse(payload, RestaurantResponseEvent.class);
-        if (event == null || event.orderId() == null) {
+    @Transactional
+    @KafkaListener(topics = "restaurant.order.response", groupId = GROUP)
+    public void onRestaurantResponse(ConsumerRecord<String, String> record) {
+        if (!inbox.firstDelivery(GROUP, EventHeaders.eventId(record))) {
             return;
+        }
+        RestaurantResponseEvent event = parse(record.value(), RestaurantResponseEvent.class);
+        if (event.orderId() == null) {
+            throw new NonRetryableEventException("restaurant.order.response without orderId: " + record.value());
         }
         OrderStatus mapped = "CONFIRMED".equals(event.status()) ? OrderStatus.CONFIRMED : OrderStatus.CANCELLED;
         apply(event.orderId(), mapped, "restaurant");
@@ -67,8 +89,7 @@ public class OrderStatusListeners {
         try {
             return json.readValue(payload, type);
         } catch (JacksonException | IllegalArgumentException e) {
-            log.error("dropping malformed {} payload: {}", type.getSimpleName(), payload);
-            return null;
+            throw new NonRetryableEventException("malformed " + type.getSimpleName() + " payload: " + payload, e);
         }
     }
 }

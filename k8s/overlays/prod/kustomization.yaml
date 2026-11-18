@@ -14,6 +14,10 @@ resources:
   - ingress.yaml
   - network-policy.yaml
 
+# Prometheus, Tempo and Grafana; also turns on trace export in every service.
+components:
+  - ../../../observability
+
 secretGenerator:
   - name: quickbite-db
     envs:

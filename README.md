@@ -28,8 +28,7 @@ A microservices-based backend for a food delivery platform, built as part of the
    └────────────────────────────────────────────────────────────────┘
 ```
 
-All services are **Java 25 / Spring Boot 4**, built from one Maven reactor. See
-[docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md) for the Go → Spring Boot migration design.
+All services are **Java 25 / Spring Boot 4**, built from one Maven reactor.
 
 ## Tech Stack
 
@@ -39,7 +38,9 @@ All services are **Java 25 / Spring Boot 4**, built from one Maven reactor. See
 | Framework          | Spring Boot 4.0, Spring Data JPA (Hibernate 7), Jackson 3                 |
 | API Gateway        | Spring Cloud Gateway (WebFlux)                                            |
 | Sync RPC           | gRPC via Spring gRPC 1.0 (contracts in `grpc-contracts/`)                 |
-| Messaging          | Apache Kafka 4.1 (KRaft, no ZooKeeper)                                    |
+| Messaging          | Apache Kafka 4.1 (KRaft, no ZooKeeper), transactional outbox + inbox      |
+| Resilience         | Resilience4j circuit breakers (gRPC calls, gateway routes), dead-letter topics |
+| Observability      | Micrometer → Prometheus, OpenTelemetry traces → Tempo, Grafana dashboards  |
 | Databases          | PostgreSQL 16 (one per service), Liquibase migrations                     |
 | API Docs           | springdoc / OpenAPI 3                                                     |
 | Containerization   | One shared multi-stage Dockerfile (jlink JRE + AOT cache), Docker Compose |
@@ -71,12 +72,74 @@ graph LR
     CS -->|customer.notification| Console
 ```
 
-Events are published only after the database transaction commits.
+Every topic also has a dead-letter topic, `<topic>.DLT`, for events a consumer could not process.
+
+## Reliable messaging: transactional outbox
+
+Services never call Kafka from business code. The shared [`messaging`](messaging) module handles it:
+
+1. **Outbox.** `Outbox.publish(topic, key, payload)` inserts the event into the service's own
+   `outbox_events` table **in the same transaction** as the business change (order saved, delivery
+   assigned, menu item updated...). Both commit, or neither does. A rolled-back order is never announced.
+   An event is never lost when Kafka is down or the service crashes right after committing.
+2. **Relay.** A background thread (`OutboxRelay`) sends committed events to Kafka in order, waits for
+   acknowledgements, and marks them published. While Kafka is unreachable it retries with backoff. The
+   events wait in the table, visible as `quickbite_outbox_pending` in Grafana. With several replicas, a
+   Postgres advisory lock lets only one relay run at a time, which keeps the order. Published rows are
+   deleted after 7 days.
+3. **Inbox.** Delivery is *at least once*, so consumers deduplicate. Each Kafka record carries an
+   `event-id` header. A listener records that id in `processed_events` in the same transaction as its own
+   changes, and skips ids it has already processed.
+4. **Retries and dead letters.** A listener that throws is retried with exponential backoff (5 times,
+   500 ms → 10 s). After that the record goes to `<topic>.DLT`. Malformed events go there immediately,
+   so one bad record never blocks a partition.
+
+The tables are created by a Liquibase changelog shipped in the module
+(`db/changelog/messaging/001-outbox-inbox.sql`), included by each service's master changelog.
+Trace context is stored with each event, so a trace follows an order from the HTTP request, through the
+outbox and Kafka, into every consumer.
+
+```bash
+# Inspect the outbox of a service
+docker exec -it quickbite-postgres psql -U quickbite -d quickbite_order_db \
+  -c "SELECT id, topic, created_at, published_at, attempts, last_error FROM outbox_events ORDER BY id DESC LIMIT 10"
+```
+
+## Circuit breakers
+
+| Where | Breakers | What counts as a failure | When open |
+|-------|----------|--------------------------|-----------|
+| order-service → gRPC | `restaurant-service`, `customer-service` | `UNAVAILABLE`, `DEADLINE_EXCEEDED`, `INTERNAL`, ... (not `NOT_FOUND`/`INVALID_ARGUMENT`, which are answers) | `POST /api/orders` fails fast with `503 ... unavailable (circuit open)`, without sending the RPC |
+| api-gateway → services | one per service | connection refused, response timeout | `503 {"error": "<service> is temporarily unavailable"}` with `Retry-After` |
+
+Both open at a 50% failure rate over the last 20 calls (after at least 10), stay open for 10 s, then let
+3 trial calls through. The order-service settings are under `quickbite.grpc.circuit-breaker` in its
+`application.yml`. Breaker state is on the Grafana dashboard (`resilience4j_circuitbreaker_state`).
+
+## Observability
+
+| Signal  | How | Where |
+|---------|-----|-------|
+| Metrics | Micrometer, `/actuator/prometheus` on every service, scraped by Prometheus every 15 s | Grafana dashboard **QuickBite overview**, Prometheus at <http://localhost:9090> |
+| Traces  | OpenTelemetry (Micrometer Tracing), exported over OTLP to Grafana Tempo. Covers HTTP, gRPC, Kafka and the outbox relay | Grafana → Explore → Tempo, or click an exemplar dot on a latency graph |
+| Logs    | Every log line carries `traceId`/`spanId`, so you can jump from a trace to the matching logs | `docker compose logs <service>` |
+
+Prometheus *stores* the metrics and Grafana *displays* them. Tempo plays the same storage role for traces.
+
+Open **Grafana at <http://localhost:3000>** (no login; it is bound to localhost only). The home dashboard shows
+request rate, 5xx ratio and p95 latency per service, circuit-breaker state, gRPC calls, outbox backlog
+and relay throughput, Kafka listeners, duplicate deliveries, and JVM heap/CPU. Tempo also builds a
+**service map** from the traces (Explore → Tempo → Service Graph).
+
+Every request is traced (`TRACING_SAMPLING_PROBABILITY`, default `1.0`; lower it under real load). Trace
+export is on only when `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT` is set. Compose and the
+Kubernetes overlays set it, so a service started from the IDE stays quiet.
 
 ## Prerequisites
 
 - Docker Desktop (Docker Engine 20.10+ and Docker Compose V2)
-- About 2.5 GB of RAM for Docker. The whole stack runs within ~2.4 GB of memory limits.
+- About 3.5 GB of RAM for Docker (Docker Desktop → Settings → Resources). The services, Postgres and Kafka
+  run within ~2.4 GB of memory limits, and Prometheus, Tempo and Grafana add up to ~0.9 GB.
 
 ## Quick Start
 
@@ -97,7 +160,8 @@ Run the end-to-end smoke test (REST → gRPC → Kafka → DB) once everything i
 scripts/smoke-test.sh
 ```
 
-Once running, all services are accessible through the API Gateway at `http://localhost:8080`.
+Once running, all services are accessible through the API Gateway at `http://localhost:8080`, and
+Grafana at `http://localhost:3000`.
 
 All published ports are bound to `127.0.0.1`, so the stack is reachable from your machine only. The
 services have no built-in database password: to run one outside Docker (e.g. from your IDE), set
@@ -143,14 +207,18 @@ Manifests live in [`k8s/`](k8s) as Kustomize (built into `kubectl`, nothing else
 | `k8s/overlays/local`  | Dev password, locally built `quickbite/*` images, gateway as a `LoadBalancer`              |
 | `k8s/overlays/prod`   | GHCR images, password from a git-ignored file, Ingress with TLS, NetworkPolicies          |
 | `k8s/vm`              | VM scripts used by `scripts/cloud-deploy.sh`: k3s + cert-manager bootstrap, deploy        |
+| `observability`       | Kustomize component used by both overlays: Prometheus, Tempo, Grafana; turns on trace export |
 
-The stack requests about 2.6 GiB of memory, so use a node with at least 4 GB of RAM (8 GB is comfortable).
-Only the gateway is exposed; Postgres, Kafka, gRPC and the service REST ports stay inside the cluster.
+The stack requests about 2.6 GiB of memory, plus about 0.6 GiB for observability, so use a node with at
+least 4 GB of RAM (8 GB is comfortable). Only the gateway's `/api` paths are exposed. Postgres, Kafka,
+gRPC, the service REST ports, `/actuator` and Grafana stay inside the cluster. Open Grafana with
+`kubectl -n quickbite port-forward svc/grafana 3000:3000`. To run without observability, remove the
+`components:` entry from the overlay.
 
 ### Local cluster (Docker Desktop, k3d, kind, minikube)
 
-The local overlay reserves less memory (about 1.7 GiB of requests, same limits), so it fits a
-Docker Desktop VM with 4 GB of memory and Kubernetes enabled (Settings → Kubernetes, kubeadm). Turn Kubernetes off
+The local overlay reserves less memory (about 1.7 GiB of requests for the application, 0.6 GiB for
+observability, same limits), so it fits a Docker Desktop VM with 4 GB of memory (6 GB is more comfortable) and Kubernetes enabled (Settings → Kubernetes, kubeadm). Turn Kubernetes off
 again afterwards to give the memory back; Compose does not need it.
 
 ```bash
@@ -256,16 +324,17 @@ quickbite/
 ├── pom.xml                   (Maven reactor / shared parent)
 ├── docker-compose.yml
 ├── k8s/                      (Kustomize: base + local/prod overlays)
+├── observability/            (Prometheus, Tempo, Grafana config + dashboard; Kustomize component)
 ├── .github/workflows/        (image build -> GHCR)
 ├── docker/
 │   ├── jvm.Dockerfile        (one Dockerfile for all services)
 │   └── jvm.options           (JVM flags, used for AOT training and at runtime)
-├── docs/MIGRATION_PLAN.md
 ├── scripts/
 │   ├── init-databases.sql
 │   ├── seed-data.sql
 │   └── smoke-test.sh
 ├── grpc-contracts/           (.proto files + generated stubs)
+├── messaging/                (transactional outbox, inbox, Kafka retries/DLT; shared by the services)
 ├── api-gateway/              (Spring Cloud Gateway)
 ├── restaurant-service/       (Spring Boot + gRPC server)
 ├── order-service/            (Spring Boot + gRPC client)

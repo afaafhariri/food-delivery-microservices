@@ -22,7 +22,9 @@ spec:
     - host: quickbite.example.com
       http:
         paths:
-          - path: /
+          # Only the API is public. /actuator (health, gateway routes, Prometheus
+          # metrics) stays inside the cluster.
+          - path: /api
             pathType: Prefix
             backend:
               service:

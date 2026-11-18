@@ -51,6 +51,9 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          envFrom: # tracing settings (the observability component adds the OTLP endpoint)
+            - configMapRef:
+                name: quickbite-common
           env:
             - { name: SERVER_PORT, value: "8080" }
             - { name: RESTAURANT_SERVICE_URL, value: "http://restaurant-service:8081" }

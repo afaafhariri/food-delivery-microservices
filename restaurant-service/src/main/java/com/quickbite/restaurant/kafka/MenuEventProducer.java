@@ -1,16 +1,17 @@
 package com.quickbite.restaurant.kafka;
 
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import com.quickbite.messaging.Outbox;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * {@code restaurant.menu.updated}, written to the transactional outbox. Callers are
+ * {@code @Transactional} service methods, so an event exists only if the menu change commits.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -18,22 +19,14 @@ public class MenuEventProducer {
 
     private static final String TOPIC = "restaurant.menu.updated";
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final Outbox outbox;
 
     public void publishMenuEvent(UUID restaurantId, UUID itemId, MenuAction action) {
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("restaurantId", restaurantId.toString());
-        payload.put("itemId", itemId.toString());
-        payload.put("action", action.name());
-
-        try {
-            String message = objectMapper.writeValueAsString(payload);
-            kafkaTemplate.send(TOPIC, restaurantId.toString(), message);
-            log.info("Published menu event: restaurantId={}, itemId={}, action={}", restaurantId, itemId, action);
-        } catch (JacksonException e) {
-            log.error("Failed to serialize menu event", e);
-        }
+        outbox.publish(TOPIC, restaurantId.toString(), Map.of(
+                "restaurantId", restaurantId.toString(),
+                "itemId", itemId.toString(),
+                "action", action.name()));
+        log.info("Queued menu event: restaurantId={}, itemId={}, action={}", restaurantId, itemId, action);
     }
 
     public enum MenuAction {

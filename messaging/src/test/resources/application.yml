@@ -1,0 +1,18 @@
+spring:
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+    producer:
+      properties:
+        # Fail fast while the broker is paused in kafkaOutageDelaysButNeverLosesEvents.
+        delivery.timeout.ms: 4000
+        request.timeout.ms: 2000
+        max.block.ms: 2000
+quickbite:
+  messaging:
+    outbox:
+      poll-interval: 200ms
+      send-timeout: 5s
+      max-backoff: 1s

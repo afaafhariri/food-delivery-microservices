@@ -38,12 +38,12 @@ remote 'sudo -n true' || {
   exit 1
 }
 
-step "Copying k8s/ and scripts/ to ~/$REMOTE_DIR"
+step "Copying k8s/, observability/ and scripts/ to ~/$REMOTE_DIR"
 # COPYFILE_DISABLE / --no-xattrs: no macOS ._* files or xattr headers in the archive.
 COPYFILE_DISABLE=1 tar -C "$ROOT" --no-xattrs \
     --exclude 'k8s/overlays/prod/secrets.env' --exclude 'k8s/overlays/cloud' --exclude '.DS_Store' \
-    -czf - k8s scripts |
-  remote "rm -rf ~/$REMOTE_DIR/k8s ~/$REMOTE_DIR/scripts && mkdir -p ~/$REMOTE_DIR && tar -xzf - -C ~/$REMOTE_DIR"
+    -czf - k8s observability scripts |
+  remote "rm -rf ~/$REMOTE_DIR/k8s ~/$REMOTE_DIR/observability ~/$REMOTE_DIR/scripts && mkdir -p ~/$REMOTE_DIR && tar -xzf - -C ~/$REMOTE_DIR"
 
 step "Bootstrapping k3s + cert-manager (skipped if already done)"
 remote "sudo -n bash ~/$REMOTE_DIR/k8s/vm/bootstrap.sh"
