@@ -5,6 +5,7 @@ import com.quickbite.messaging.Inbox;
 import com.quickbite.messaging.NonRetryableEventException;
 import com.quickbite.order.domain.OrderRepository;
 import com.quickbite.order.domain.OrderStatus;
+import com.quickbite.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -32,6 +33,7 @@ public class OrderStatusListeners {
     static final String GROUP = "order-service-group";
 
     private final OrderRepository repository;
+    private final OrderService orders;
     private final Inbox inbox;
     private final ObjectMapper json;
 
@@ -72,8 +74,12 @@ public class OrderStatusListeners {
         if (event.orderId() == null) {
             throw new NonRetryableEventException("restaurant.order.response without orderId: " + record.value());
         }
-        OrderStatus mapped = "CONFIRMED".equals(event.status()) ? OrderStatus.CONFIRMED : OrderStatus.CANCELLED;
-        apply(event.orderId(), mapped, "restaurant");
+        if ("CONFIRMED".equals(event.status())) {
+            apply(event.orderId(), OrderStatus.CONFIRMED, "restaurant");
+        } else if (!orders.cancelByRestaurant(event.orderId(), event.reason())) {
+            // Through OrderService, so the cancellation is announced on order.cancelled.
+            log.warn("restaurant event for unknown order {}", event.orderId());
+        }
     }
 
     private void apply(UUID orderId, OrderStatus status, String source) {

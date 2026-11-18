@@ -66,11 +66,18 @@ with reflection (`grpcurl -plaintext localhost:9091 list`) after publishing the 
 graph LR
     OS[Order Service] -->|order.placed| DS[Delivery Service]
     OS -->|order.placed| CS[Customer Service]
+    OS -->|order.cancelled| DS
     RS[Restaurant Service] -->|restaurant.order.response| OS
     DS -->|delivery.status.updated| OS
     RS -->|restaurant.menu.updated| Future
     CS -->|customer.notification| Console
 ```
+
+`order.cancelled` is published whenever an order becomes CANCELLED: the customer cancels it
+(`DELETE /api/orders/{id}`), its status is set to CANCELLED, or the restaurant rejects it. delivery-service
+then cancels the delivery if it is still ASSIGNED and frees the driver. A delivery that is already picked up
+is left alone. Kafka gives no ordering between topics, so the cancellation can arrive before `order.placed`.
+delivery-service records cancelled orders in `cancelled_orders` and never assigns a driver to one.
 
 Every topic also has a dead-letter topic, `<topic>.DLT`, for events a consumer could not process.
 
