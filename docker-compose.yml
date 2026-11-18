@@ -36,10 +36,23 @@ x-backing-services: &backing-services
   kafka:
     condition: service_healthy
 
+# Spans go to Tempo over OTLP/HTTP. Unset it to turn trace export off.
+x-tracing-env: &tracing-env
+  MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+
 x-common-env: &common-env
+  <<: *tracing-env
   SPRING_DATASOURCE_USERNAME: quickbite
   SPRING_DATASOURCE_PASSWORD: quickbite123
   SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+# Prometheus, Tempo and Grafana: read-only, unprivileged, localhost-only ports.
+x-observability: &observability
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging: *logging
 
 services:
   # ────────────────────────────────────────────────────────────────────────────
@@ -213,6 +226,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      <<: *tracing-env
       SERVER_PORT: 8080
       RESTAURANT_SERVICE_URL: http://restaurant-service:8081
       ORDER_SERVICE_URL: http://order-service:8082
@@ -232,6 +246,88 @@ services:
         limits:
           memory: 256M
 
+  # ────────────────────────────────────────────────────────────────────────────
+  # Observability: Prometheus (metrics), Tempo (traces), Grafana (dashboards)
+  #   Grafana     http://localhost:3000  (QuickBite overview dashboard, no login)
+  #   Prometheus  http://localhost:9090
+  # ────────────────────────────────────────────────────────────────────────────
+  prometheus:
+    <<: *observability
+    image: prom/prometheus:v3.5.0
+    container_name: quickbite-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+      - --web.enable-remote-write-receiver     # Tempo writes service-graph metrics here
+      - --enable-feature=exemplar-storage      # latency points link to their traces
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.compose.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  tempo:
+    <<: *observability
+    image: grafana/tempo:2.8.2
+    container_name: quickbite-tempo
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+  grafana:
+    <<: *observability
+    image: grafana/grafana:12.1.1
+    container_name: quickbite-grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Anonymous admin, no login form: acceptable only because the port is bound to localhost.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/quickbite-overview.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
+    tmpfs:                                     # stateless: everything is provisioned from files
+      - /var/lib/grafana:size=128m,uid=472,gid=472
+      - /tmp:size=32m,mode=1777
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
 volumes:
   postgres-data:
   kafka-data:
+  prometheus-data:
+  tempo-data:

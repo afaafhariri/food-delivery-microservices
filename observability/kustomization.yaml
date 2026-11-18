@@ -1,0 +1,38 @@
+# Observability for Kubernetes: Prometheus (metrics), Tempo (traces) and Grafana
+# (dashboards), as a Kustomize *component*. Both overlays include it:
+#   components:
+#     - ../../../observability
+# It also points every service's OpenTelemetry exporter at Tempo. Without this
+# component the services still expose /actuator/prometheus but export no spans.
+#
+# Grafana is not exposed outside the cluster. Open it with:
+#   kubectl -n quickbite port-forward svc/grafana 3000:3000
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - k8s/prometheus.yaml
+  - k8s/tempo.yaml
+  - k8s/grafana.yaml
+
+configMapGenerator:
+  # Merged into the base ConfigMap every JVM service loads with envFrom.
+  - name: quickbite-common
+    behavior: merge
+    literals:
+      - MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://tempo:4318/v1/traces
+  - name: prometheus-config
+    files:
+      - prometheus.yml=prometheus/prometheus.k8s.yml
+  - name: tempo-config
+    files:
+      - tempo.yml=tempo/tempo.yml
+  - name: grafana-datasources
+    files:
+      - datasources.yml=grafana/provisioning/datasources/datasources.yml
+  - name: grafana-dashboard-providers
+    files:
+      - dashboards.yml=grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - quickbite-overview.json=grafana/dashboards/quickbite-overview.json

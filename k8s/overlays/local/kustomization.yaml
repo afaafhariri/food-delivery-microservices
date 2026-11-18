@@ -11,6 +11,10 @@ namespace: quickbite # also places the Secret generated below
 resources:
   - ../../base
 
+# Prometheus, Tempo and Grafana; also turns on trace export in every service.
+components:
+  - ../../../observability
+
 secretGenerator:
   - name: quickbite-db
     literals:

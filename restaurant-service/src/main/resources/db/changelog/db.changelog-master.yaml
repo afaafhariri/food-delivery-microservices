@@ -1,3 +1,6 @@
 databaseChangeLog:
   - include:
       file: db/changelog/changesets/001-create-tables.yaml
+  # Outbox and inbox tables (from the messaging module)
+  - include:
+      file: db/changelog/messaging/001-outbox-inbox.sql

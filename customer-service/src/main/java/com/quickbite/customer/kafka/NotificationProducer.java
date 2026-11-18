@@ -1,15 +1,15 @@
 package com.quickbite.customer.kafka;
 
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
+import com.quickbite.messaging.Outbox;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
+/** {@code customer.notification}, written to the transactional outbox (call it inside a transaction). */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -17,22 +17,14 @@ public class NotificationProducer {
 
     private static final String TOPIC = "customer.notification";
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
+    private final Outbox outbox;
 
     public void sendOrderPlacedNotification(UUID customerId, UUID orderId) {
-        try {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("customerId", customerId.toString());
-            payload.put("message", "Your order " + orderId + " has been placed successfully.");
-            payload.put("type", "ORDER_PLACED");
-            payload.put("timestamp", LocalDateTime.now().toString());
-
-            String json = objectMapper.writeValueAsString(payload);
-            kafkaTemplate.send(TOPIC, customerId.toString(), json);
-            log.info("Sent notification for customer {} - order {}", customerId, orderId);
-        } catch (Exception e) {
-            log.error("Failed to send notification for customer {} - order {}", customerId, orderId, e);
-        }
+        outbox.publish(TOPIC, customerId.toString(), Map.of(
+                "customerId", customerId.toString(),
+                "message", "Your order " + orderId + " has been placed successfully.",
+                "type", "ORDER_PLACED",
+                "timestamp", LocalDateTime.now().toString()));
+        log.info("Queued notification for customer {} - order {}", customerId, orderId);
     }
 }
