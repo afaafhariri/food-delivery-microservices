@@ -22,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -154,6 +155,10 @@ public class OrderService {
         OrderStatus status = OrderStatus.parse(rawStatus)
                 .orElseThrow(() -> ApiException.badRequest("invalid status: " + rawStatus));
         Order order = load(id);
+        if (!order.getStatus().canMoveTo(status)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "cannot move order from " + order.getStatus() + " to " + status);
+        }
         if (status == OrderStatus.CANCELLED) {
             markCancelled(order, "status set to CANCELLED");
         } else {
@@ -187,8 +192,8 @@ public class OrderService {
             return false;
         }
         Order order = found.get();
-        if (order.getStatus() == OrderStatus.DELIVERED) {
-            log.warn("restaurant rejected order {} after it was delivered; ignoring", id);
+        if (!order.getStatus().canMoveTo(OrderStatus.CANCELLED)) {
+            log.warn("restaurant rejected order {}, but it is already {}; ignoring", id, order.getStatus());
         } else {
             markCancelled(order, reason == null || reason.isBlank() ? "rejected by restaurant" : reason);
         }

@@ -90,10 +90,11 @@ public class OrderStatusListeners {
         }
     }
 
+    /** Mirrors a delivery state, but only along an allowed transition (never out of CANCELLED, say). */
     private void apply(UUID orderId, OrderStatus status, String source) {
-        int updated = repository.updateStatus(orderId, status, Instant.now());
+        int updated = repository.updateStatusFrom(orderId, OrderStatus.allowedBefore(status), status, Instant.now());
         if (updated == 0) {
-            log.warn("{} event for unknown order {}", source, orderId);
+            log.warn("{} event: order {} is unknown or cannot move to {}; ignoring", source, orderId, status);
         } else {
             log.info("order {} -> {} (from {} event)", orderId, status, source);
         }

@@ -40,6 +40,17 @@ class OrderStatusListenersTest {
     }
 
     @Test
+    void deliveredIsOnlyMirroredOntoAPickedUpOrder() {
+        when(inbox.firstDelivery(anyString(), any())).thenReturn(true);
+
+        listeners.onDeliveryStatus(new ConsumerRecord<>("delivery.status.updated", 0, 0L, "key",
+                "{\"orderId\":\"" + orderId + "\",\"status\":\"DELIVERED\"}"));
+
+        verify(repository).updateStatusFrom(eq(orderId),
+                eq(java.util.EnumSet.of(OrderStatus.PICKED_UP, OrderStatus.DELIVERED)), eq(OrderStatus.DELIVERED), any());
+    }
+
+    @Test
     void rejectionCancelsTheOrderWithTheRestaurantsReason() {
         when(inbox.firstDelivery(anyString(), any())).thenReturn(true);
         when(orders.cancelByRestaurant(orderId, "kitchen closed")).thenReturn(true);

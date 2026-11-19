@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -164,8 +165,12 @@ public class DeliveryService {
         Delivery delivery = deliveries.findWithDriverById(id)
                 .orElseThrow(() -> ApiException.notFound("delivery not found"));
         requireAssignedDriverOrAdmin(delivery);
-        if (delivery.getStatus() == DeliveryStatus.CANCELLED) {
-            throw ApiException.badRequest("delivery was cancelled");
+        if (!delivery.getStatus().canMoveTo(status)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "cannot move delivery from " + delivery.getStatus() + " to " + status);
+        }
+        if (delivery.getStatus() == status) {
+            return toResponse(delivery);   // nothing changes, nothing to announce
         }
 
         delivery.setStatus(status);

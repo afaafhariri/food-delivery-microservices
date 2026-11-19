@@ -6,15 +6,20 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.config.TopicConfig;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
@@ -25,7 +30,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import javax.sql.DataSource;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -67,7 +74,7 @@ public class MessagingAutoConfiguration {
     @ConditionalOnMissingBean(CommonErrorHandler.class)
     DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<?, ?> kafka, MessagingProperties properties) {
         var recoverer = new DeadLetterPublishingRecoverer(kafka,
-                (record, exception) -> new TopicPartition(record.topic() + ".DLT", -1));
+                (record, exception) -> new TopicPartition(record.topic() + Topics.DEAD_LETTER_SUFFIX, -1));
         MessagingProperties.Consumer config = properties.consumer();
         var backOff = new ExponentialBackOffWithMaxRetries(config.maxRetries());
         backOff.setInitialInterval(config.initialBackoff().toMillis());
@@ -76,6 +83,31 @@ public class MessagingAutoConfiguration {
         var handler = new DefaultErrorHandler(recoverer, backOff);
         handler.addNotRetryableExceptions(NonRetryableEventException.class);
         return handler;
+    }
+
+    /**
+     * Every QuickBite topic and its dead-letter topic, created by Spring's {@link KafkaAdmin} at
+     * startup if missing (the broker no longer auto-creates topics). Existing topics get more
+     * partitions or the declared retention if they differ ({@code spring.kafka.admin.modify-topic-configs}).
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "quickbite.messaging.topics", name = "declare", matchIfMissing = true)
+    KafkaAdmin.NewTopics quickbiteTopics(MessagingProperties properties) {
+        MessagingProperties.Topics config = properties.topics();
+        List<NewTopic> topics = new ArrayList<>();
+        for (String name : Topics.ALL) {
+            topics.add(TopicBuilder.name(name)
+                    .partitions(config.partitions())
+                    .replicas(config.replicas())
+                    .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(config.retention().toMillis()))
+                    .build());
+            topics.add(TopicBuilder.name(name + Topics.DEAD_LETTER_SUFFIX)
+                    .partitions(1)                       // a trickle of failed events; order is irrelevant
+                    .replicas(config.replicas())
+                    .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(config.deadLetterRetention().toMillis()))
+                    .build());
+        }
+        return new KafkaAdmin.NewTopics(topics.toArray(NewTopic[]::new));
     }
 
     /** Stores the current trace context with each event when Micrometer Tracing is present. */
