@@ -21,6 +21,10 @@
         </dependency>
         <dependency>
             <groupId>com.quickbite</groupId>
+            <artifactId>security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.quickbite</groupId>
             <artifactId>grpc-contracts</artifactId>
         </dependency>
         <dependency>

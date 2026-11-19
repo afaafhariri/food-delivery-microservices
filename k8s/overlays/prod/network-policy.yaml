@@ -1,4 +1,4 @@
-# Only the gateway accepts traffic from outside the namespace. Postgres, Kafka
+# Only the gateway and Keycloak accept traffic from outside the namespace. Postgres, Kafka
 # and the four services (REST and gRPC) are reachable only from pods in the
 # quickbite namespace. Enforced only by CNIs that support NetworkPolicy
 # (k3s, Calico, Cilium, the GKE/EKS/AKS policy add-ons).
@@ -42,4 +42,19 @@ spec:
   ingress:
     - ports:
         - port: 8089
+          protocol: TCP
+---
+# Keycloak's login pages and token endpoint, reached through the ingress controller.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-public
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 8080
           protocol: TCP

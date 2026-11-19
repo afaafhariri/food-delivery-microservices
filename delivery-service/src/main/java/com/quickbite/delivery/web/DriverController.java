@@ -32,15 +32,21 @@ public class DriverController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Register a new driver")
+    @Operation(summary = "Register the caller as a driver (role driver; one per account)")
     public DriverResponse register(@Valid @RequestBody CreateDriverRequest request) {
         return drivers.register(request);
     }
 
     @GetMapping
-    @Operation(summary = "List drivers, optionally filtered by availability")
+    @Operation(summary = "List drivers, optionally filtered by availability (admin)")
     public List<DriverResponse> list(@RequestParam(required = false) Boolean available) {
         return drivers.list(available);
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "The caller's own driver profile")
+    public DriverResponse me() {
+        return drivers.mine();
     }
 
     @PutMapping("/{id}")

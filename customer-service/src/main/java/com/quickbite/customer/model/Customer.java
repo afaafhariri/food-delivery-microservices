@@ -38,6 +38,10 @@ public class Customer {
 
     private String phone;
 
+    /** Keycloak user id of the account that owns this profile; null means admin-managed. */
+    @Column(name = "user_id", length = 64, unique = true)
+    private String userId;
+
     @Builder.Default
     @Column(nullable = false)
     private boolean active = true;

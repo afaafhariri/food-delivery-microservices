@@ -12,6 +12,8 @@ import com.quickbite.order.dto.OrderDtos.OrderResponse;
 import com.quickbite.order.grpc.OrderValidationClient;
 import com.quickbite.order.grpc.OrderValidationClient.ValidatedOrder;
 import com.quickbite.order.web.ApiException;
+import com.quickbite.security.CurrentUser;
+import com.quickbite.security.Roles;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -43,18 +46,25 @@ public class OrderService {
     private final OrderValidationClient validation;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
+    private final CurrentUser currentUser;
 
     /**
      * Remote validation runs before the transaction starts, so no DB connection is held
-     * while waiting on the network.
+     * while waiting on the network. Customers can only order for their own customer profile
+     * (customer-service reports which account owns it); admins can order for anyone.
      */
     public OrderResponse create(CreateOrderRequest request) {
+        currentUser.requireAnyRole(Roles.CUSTOMER);
         boolean hasFreeTextAddress = request.deliveryAddress() != null && !request.deliveryAddress().isBlank();
         if (!hasFreeTextAddress && request.addressId() == null) {
             throw ApiException.badRequest("delivery_address or address_id is required");
         }
 
         ValidatedOrder validated = validation.validate(request);
+        String ownerId = validated.customer().getUserId().isEmpty() ? null : validated.customer().getUserId();
+        if (!currentUser.ownsOrAdmin(ownerId)) {
+            throw new AccessDeniedException("customer " + request.customerId() + " is not your profile");
+        }
         String deliveryAddress = hasFreeTextAddress
                 ? request.deliveryAddress().strip()
                 : validated.customer().getDeliveryAddress();
@@ -62,6 +72,7 @@ public class OrderService {
         Order order = new Order();
         order.setCustomerId(request.customerId());
         order.setRestaurantId(request.restaurantId());
+        order.setCustomerUserId(ownerId);
         order.setDeliveryAddress(deliveryAddress);
         order.setStatus(OrderStatus.PLACED);
         order.setTotalAmount(fromMinor(validated.quote().getTotalMinor()));
@@ -85,18 +96,30 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public OrderResponse get(UUID id) {
-        return repository.findWithItemsById(id)
-                .map(OrderService::toResponse)
-                .orElseThrow(() -> ApiException.notFound("order not found"));
+        Order order = repository.findWithItemsById(id).orElseThrow(() -> ApiException.notFound("order not found"));
+        currentUser.requireOwnerOrAdmin(order.getCustomerUserId());
+        return toResponse(order);
     }
 
     @Transactional(readOnly = true)
-    public OrderPage list(OrderQuery query, int page, int size) {
+    public OrderPage list(OrderQuery requested, int page, int size) {
+        OrderQuery query;
+        if (currentUser.isAdmin()) {
+            query = requested;
+        } else if (currentUser.hasRole(Roles.CUSTOMER)) {
+            query = requested.forUser(currentUser.id());   // customers only ever see their own orders
+        } else {
+            throw new AccessDeniedException("only customers and admins can list orders");
+        }
+
         int safePage = Math.max(page, 1);
         int safeSize = size < 1 || size > MAX_PAGE_SIZE ? DEFAULT_PAGE_SIZE : size;
 
         Specification<Order> spec = (root, cq, cb) -> {
             List<Predicate> predicates = new ArrayList<>(4);
+            if (query.customerUserId() != null) {
+                predicates.add(cb.equal(root.get("customerUserId"), query.customerUserId()));
+            }
             if (query.customerId() != null) {
                 predicates.add(cb.equal(root.get("customerId"), query.customerId()));
             }
@@ -125,6 +148,9 @@ public class OrderService {
 
     @Transactional
     public OrderResponse updateStatus(UUID id, String rawStatus) {
+        if (!currentUser.isAdmin()) {
+            throw new AccessDeniedException("only admins can set an order's status");
+        }
         OrderStatus status = OrderStatus.parse(rawStatus)
                 .orElseThrow(() -> ApiException.badRequest("invalid status: " + rawStatus));
         Order order = load(id);
@@ -139,6 +165,7 @@ public class OrderService {
     @Transactional
     public OrderResponse cancel(UUID id) {
         Order order = load(id);
+        currentUser.requireOwnerOrAdmin(order.getCustomerUserId());
         if (order.getStatus() != OrderStatus.PLACED) {
             throw ApiException.badRequest(
                     "order can only be cancelled when status is PLACED, current status: " + order.getStatus());

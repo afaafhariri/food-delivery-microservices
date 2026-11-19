@@ -5,6 +5,7 @@ import com.quickbite.order.domain.OrderRepository;
 import com.quickbite.order.domain.OrderStatus;
 import com.quickbite.order.grpc.OrderValidationClient;
 import com.quickbite.order.web.ApiException;
+import com.quickbite.security.CurrentUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -27,8 +28,16 @@ class OrderCancellationTest {
 
     private final OrderRepository repository = mock(OrderRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+    private final CurrentUser admin = admin();
     private final OrderService service = new OrderService(repository, mock(OrderValidationClient.class), events,
-            mock(TransactionTemplate.class));
+            mock(TransactionTemplate.class), admin);
+
+    private static CurrentUser admin() {
+        CurrentUser user = mock(CurrentUser.class);
+        when(user.isAdmin()).thenReturn(true);
+        when(user.ownsOrAdmin(any())).thenReturn(true);
+        return user;
+    }
 
     @Test
     void customerCancellationPublishesOrderCancelled() {

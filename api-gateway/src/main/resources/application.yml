@@ -21,6 +21,8 @@ spring:
               max-idle-time: 30s
 
 quickbite:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}   # comma-separated origin patterns
   services:
     restaurant-url: ${RESTAURANT_SERVICE_URL:http://restaurant-service:8081}
     order-url: ${ORDER_SERVICE_URL:http://order-service:8082}
@@ -54,6 +56,12 @@ management:
   # Spans are exported over OTLP only when MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT
   # is set (Compose and the Kubernetes observability component set it), so local runs
   # without a tracing backend stay quiet.
+
+# Tokens are validated with the realm's keys (fetched inside the network) and must have been
+# issued by the public Keycloak URL. Same settings as the services.
+spring.security.oauth2.resourceserver.jwt:
+  issuer-uri: ${AUTH_PUBLIC_URL:http://localhost:8180/auth}/realms/quickbite
+  jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:8180/auth}/realms/quickbite/protocol/openid-connect/certs
 
 logging:
   level:

@@ -44,6 +44,10 @@ public class Restaurant {
     @Column(nullable = false)
     private boolean active = true;
 
+    /** Keycloak user id of the owning restaurant account; null means admin-managed. */
+    @Column(name = "owner_id", length = 64)
+    private String ownerId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -27,7 +27,8 @@ class DeliveryCancellationTest {
     private final DriverRepository drivers = mock(DriverRepository.class);
     private final CancelledOrderRepository cancelledOrders = mock(CancelledOrderRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    private final DeliveryService service = new DeliveryService(deliveries, drivers, cancelledOrders, events);
+    private final DeliveryService service = new DeliveryService(deliveries, drivers, cancelledOrders, events,
+            mock(com.quickbite.security.CurrentUser.class));   // Kafka handlers never consult the caller
 
     private final UUID orderId = UUID.randomUUID();
 

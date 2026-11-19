@@ -38,6 +38,7 @@ public final class DeliveryDtos {
             String phone,
             String vehicleType,
             boolean available,
+            String userId,
             Instant createdAt,
             Instant updatedAt) {
     }

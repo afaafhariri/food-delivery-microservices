@@ -1,0 +1,18 @@
+# Keycloak on http://localhost:8180 (Docker Desktop and k3s map LoadBalancer Services to
+# localhost / the node IP), the same address as with Docker Compose. Tokens are issued for
+# http://localhost:8180/auth, which AUTH_PUBLIC_URL in kustomization.yaml must match.
+# Elsewhere: kubectl -n quickbite port-forward svc/keycloak 8180:8080
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-external
+  labels:
+    app.kubernetes.io/name: keycloak
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8180
+      targetPort: http

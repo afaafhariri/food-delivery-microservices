@@ -3,7 +3,10 @@
 #    load balancer IP).
 # 2. ingressClassName: "traefik" is the k3s default. Change it to match your
 #    cluster's ingress controller (`kubectl get ingressclass`).
-# 3. TLS certificates come from cert-manager with a ClusterIssuer named
+# 3. Keycloak's login and token endpoints are public under /auth/realms (plus /auth/resources for
+#    the login pages' assets). Its admin console is not: use
+#    kubectl -n quickbite port-forward svc/keycloak 8180:8080, then http://localhost:8180/auth/admin
+# 4. TLS certificates come from cert-manager with a ClusterIssuer named
 #    "letsencrypt" (see the Kubernetes section of README.md). Without it, the
 #    controller serves its self-signed default certificate.
 apiVersion: networking.k8s.io/v1
@@ -29,5 +32,19 @@ spec:
             backend:
               service:
                 name: api-gateway
+                port:
+                  name: http
+          - path: /auth/realms
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+          - path: /auth/resources
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
                 port:
                   name: http

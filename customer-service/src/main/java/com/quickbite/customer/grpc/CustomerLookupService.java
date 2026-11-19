@@ -35,6 +35,9 @@ public class CustomerLookupService {
                 .setCustomerId(customerId.toString())
                 .setName(customer.getName())
                 .setEmail(customer.getEmail());
+        if (customer.getUserId() != null) {
+            response.setUserId(customer.getUserId());
+        }
 
         if (!request.getAddressId().isEmpty()) {
             UUID addressId = parseId(request.getAddressId(), "address_id");

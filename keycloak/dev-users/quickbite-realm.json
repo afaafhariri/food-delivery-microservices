@@ -1,0 +1,153 @@
+{
+  "realm": "quickbite",
+  "displayName": "QuickBite",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Everything, including other users' data"
+      },
+      {
+        "name": "customer",
+        "description": "Own customer profile, addresses and orders"
+      },
+      {
+        "name": "restaurant",
+        "description": "Own restaurants and menus"
+      },
+      {
+        "name": "driver",
+        "description": "Own driver profile and assigned deliveries"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "quickbite-app",
+      "name": "QuickBite apps and API clients",
+      "description": "Public client: browser and mobile apps (authorization code + PKCE) and scripts such as the smoke test (direct access grant).",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@quickbite.test",
+      "emailVerified": true,
+      "firstName": "Ada",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "quickbite123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-quickbite",
+        "admin"
+      ]
+    },
+    {
+      "username": "customer1",
+      "enabled": true,
+      "email": "customer1@quickbite.test",
+      "emailVerified": true,
+      "firstName": "Casey",
+      "lastName": "Customer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "quickbite123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-quickbite",
+        "customer"
+      ]
+    },
+    {
+      "username": "customer2",
+      "enabled": true,
+      "email": "customer2@quickbite.test",
+      "emailVerified": true,
+      "firstName": "Chris",
+      "lastName": "Customer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "quickbite123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-quickbite",
+        "customer"
+      ]
+    },
+    {
+      "username": "restaurant1",
+      "enabled": true,
+      "email": "restaurant1@quickbite.test",
+      "emailVerified": true,
+      "firstName": "Riley",
+      "lastName": "Restaurant",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "quickbite123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-quickbite",
+        "restaurant"
+      ]
+    },
+    {
+      "username": "driver1",
+      "enabled": true,
+      "email": "driver1@quickbite.test",
+      "emailVerified": true,
+      "firstName": "Dana",
+      "lastName": "Driver",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "quickbite123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-quickbite",
+        "driver"
+      ]
+    }
+  ]
+}

@@ -69,6 +69,8 @@ QuickBite is up.
   Gateway (HTTP):   http://$HOST
   Gateway (HTTPS):  https://$HOST   (once the certificate shows READY=True above;
                                      Let's Encrypt usually takes under a minute)
-  Smoke test:       scripts/smoke-test.sh http://$HOST
+  Login (Keycloak): https://$HOST/auth/realms/quickbite/account
+                    (no users yet: create them in the admin console, see README "Authentication")
+  Smoke test:       scripts/smoke-test.sh http://$HOST   (needs the test users, see README)
   Cluster shell:    ssh $TARGET sudo k3s kubectl -n quickbite get pods
 EOF

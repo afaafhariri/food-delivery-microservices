@@ -4,8 +4,8 @@
 # scripts/cloud-deploy.sh:
 #   sudo bash k8s/vm/deploy.sh <host> <image-tag>
 #
-# The database password is generated once and kept in /etc/quickbite/secrets.env
-# (root-only), so re-deploys never change it.
+# The database and Keycloak admin passwords are generated once and kept in
+# /etc/quickbite/secrets.env (root-only), so re-deploys never change them.
 set -euo pipefail
 
 HOST="${1:?usage: deploy.sh <host> <image-tag>}"
@@ -24,6 +24,11 @@ if [[ ! -s /etc/quickbite/secrets.env ]]; then
   log "Generating database password (/etc/quickbite/secrets.env)"
   install -d -m 700 /etc/quickbite
   (umask 077; printf 'username=quickbite\npassword=%s\n' "$(openssl rand -hex 24)" > /etc/quickbite/secrets.env)
+fi
+# Added with Keycloak: VMs deployed before it get the extra key once.
+if ! grep -q '^keycloak_admin_password=' /etc/quickbite/secrets.env; then
+  log "Generating Keycloak admin password (/etc/quickbite/secrets.env)"
+  (umask 077; printf 'keycloak_admin_password=%s\n' "$(openssl rand -hex 24)" >> /etc/quickbite/secrets.env)
 fi
 install -m 600 /etc/quickbite/secrets.env "$PROD/secrets.env"
 
@@ -47,6 +52,12 @@ patches:
       - op: replace
         path: /spec/tls/0/hosts/0
         value: $HOST
+# Keycloak issues tokens for this URL; the services accept only those.
+configMapGenerator:
+  - name: quickbite-common
+    behavior: merge
+    literals:
+      - AUTH_PUBLIC_URL=https://$HOST/auth
 images:
 EOF
   # Re-tag every image the prod overlay points at.
@@ -89,7 +100,7 @@ k -n "$NS" rollout status statefulset/postgres --timeout=5m || fail
 k -n "$NS" rollout status statefulset/kafka --timeout=5m || fail
 
 log "Waiting for the services"
-for d in restaurant-service customer-service delivery-service order-service api-gateway; do
+for d in keycloak restaurant-service customer-service delivery-service order-service api-gateway; do
   k -n "$NS" rollout status "deployment/$d" --timeout=8m || fail
 done
 

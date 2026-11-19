@@ -1,0 +1,129 @@
+# Keycloak 26: the identity provider. Users log in here (served under /auth) and get JWT access
+# tokens that the gateway and the services validate with the realm's public keys.
+#
+# Its data (users, sessions, keys) lives in Postgres, in its own database quickbite_keycloak_db,
+# which the init container creates if it is missing. The realm comes from the keycloak-realm
+# ConfigMap and is imported on first start only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+spec:
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: identity
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+        app.kubernetes.io/component: identity
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # "keycloak" user of the image
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        # Waits for Postgres, then creates Keycloak's database if it does not exist yet. Works on a
+        # fresh volume and on one created before Keycloak was added.
+        - name: create-database
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres -q; do echo "waiting for postgres"; sleep 2; done
+              psql -h postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'quickbite_keycloak_db'" | grep -q 1 \
+                || psql -h postgres -d postgres -c "CREATE DATABASE quickbite_keycloak_db"
+          env:
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: quickbite-db, key: username } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: quickbite-db, key: password } }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            runAsUser: 70
+            runAsGroup: 70
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.1
+          args: [start, --import-realm]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          env:
+            - { name: KC_DB, value: postgres }
+            - { name: KC_DB_URL, value: "jdbc:postgresql://postgres:5432/quickbite_keycloak_db" }
+            - name: KC_DB_USERNAME
+              valueFrom: { secretKeyRef: { name: quickbite-db, key: username } }
+            - name: KC_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: quickbite-db, key: password } }
+            # Public URL, path included: tokens are issued for it, whichever address requested them.
+            - name: KC_HOSTNAME
+              valueFrom: { configMapKeyRef: { name: quickbite-common, key: AUTH_PUBLIC_URL } }
+            - { name: KC_HTTP_RELATIVE_PATH, value: /auth }
+            - { name: KC_HTTP_MANAGEMENT_RELATIVE_PATH, value: / }
+            - { name: KC_HTTP_ENABLED, value: "true" }        # TLS ends at the ingress controller
+            - { name: KC_PROXY_HEADERS, value: xforwarded }
+            - { name: KC_HEALTH_ENABLED, value: "true" }
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin }  # master-realm admin console user
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: quickbite-db, key: keycloak_admin_password } }
+          resources:
+            requests: { cpu: 100m, memory: 640Mi }
+            limits: { memory: 768Mi }
+          startupProbe: # the first start builds and migrates the database: allow 5 minutes
+            httpGet: { path: /health/started, port: management }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health/ready, port: management }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: management }
+            periodSeconds: 20
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm

@@ -42,7 +42,7 @@ public class RestaurantController {
     public ResponseEntity<PagedResponse<RestaurantResponse>> getAllRestaurants(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) String cuisineType) {
+            @RequestParam(name = "cuisine_type", required = false) String cuisineType) {
         PagedResponse<RestaurantResponse> response = restaurantService.getAllRestaurants(page, size, cuisineType);
         return ResponseEntity.ok(response);
     }
