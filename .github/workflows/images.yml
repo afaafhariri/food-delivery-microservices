@@ -1,6 +1,6 @@
-# Builds every service image from docker/jvm.Dockerfile and pushes it to
-# GitHub Container Registry as ghcr.io/<owner>/quickbite-<service>, tagged
-# sha-<commit> and (on master) latest. k8s/overlays/prod deploys these.
+# Runs the tests, then builds every service image from docker/jvm.Dockerfile and
+# pushes it to GitHub Container Registry as ghcr.io/<owner>/quickbite-<service>,
+# tagged sha-<commit> and (on master) latest. k8s/overlays/prod deploys these.
 name: images
 
 on:
@@ -21,8 +21,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Never publish images from a commit whose tests fail (pull requests are checked by ci.yml;
+  # this also covers direct pushes and merges).
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Tests (unit + Testcontainers)
+        run: mvn -B -ntp verify
+
   build:
     name: ${{ matrix.service }}
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

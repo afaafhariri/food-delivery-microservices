@@ -271,6 +271,18 @@ docker compose down          # Stop and remove containers
 docker compose down -v       # Also remove volumes (database data)
 ```
 
+## Continuous integration
+
+Two GitHub Actions workflows in [`.github/workflows`](.github/workflows):
+
+| Workflow | Runs on | What it does |
+|----------|---------|--------------|
+| [`ci.yml`](.github/workflows/ci.yml) | every pull request into `master` (and by hand) | **checks**: `mvn verify` (unit tests and the Testcontainers outbox test), Compose and Kustomize files render, shell scripts parse. **smoke**: builds the images, starts the whole stack in Docker Compose and runs `scripts/smoke-test.sh` against it; on failure it prints every container's logs |
+| [`images.yml`](.github/workflows/images.yml) | every push to `master` (and by hand) | runs the tests again, and only if they pass builds the five images and pushes them to GHCR |
+
+To block merging until CI passes: GitHub → *Settings* → *Branches* → add a branch protection rule (or ruleset)
+for `master` → *Require status checks to pass before merging* → select `checks` and `smoke`.
+
 ## Deploying to Kubernetes
 
 Manifests live in [`k8s/`](k8s) as Kustomize (built into `kubectl`, nothing else to install):
@@ -356,7 +368,7 @@ console. These sizes bill roughly $0.07–0.09 an hour, but a stopped VM on Azur
 ### Production (k3s on a VM, or any managed cluster)
 
 1. **Images.** Pushing to `master` runs [`.github/workflows/images.yml`](.github/workflows/images.yml),
-   which publishes `ghcr.io/<owner>/quickbite-<service>` tagged `sha-<commit>` and `latest`.
+   which runs the tests and then publishes `ghcr.io/<owner>/quickbite-<service>` tagged `sha-<commit>` and `latest`.
    GHCR packages are private by default: make them public under *Package settings*, or create a pull
    secret (`kubectl -n quickbite create secret docker-registry ghcr ...`) and add it as `imagePullSecrets`.
 2. **Cluster.** For a single VM, `curl -sfL https://get.k3s.io | sh -` gives Kubernetes with Traefik
@@ -411,7 +423,7 @@ quickbite/
 ├── k8s/                      (Kustomize: base + local/prod overlays)
 ├── observability/            (Prometheus, Tempo, Grafana config + dashboard; Kustomize component)
 ├── keycloak/                 (realm files; Kustomize component; dev users)
-├── .github/workflows/        (image build -> GHCR)
+├── .github/workflows/        (ci.yml: tests + smoke test on PRs; images.yml: tests, then images -> GHCR)
 ├── docker/
 │   ├── jvm.Dockerfile        (one Dockerfile for all services)
 │   └── jvm.options           (JVM flags, used for AOT training and at runtime)
