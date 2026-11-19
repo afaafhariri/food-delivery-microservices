@@ -2,8 +2,9 @@
 # End-to-end smoke test through the API gateway:
 #   Keycloak login -> REST -> order-service -> gRPC (restaurant + customer, caller's token
 #   forwarded) -> Postgres -> Kafka -> delivery-service (driver assignment) -> Kafka ->
-#   order-service (status sync); cancellation frees the driver; every role is refused where it
-#   should be (401 without a token, 403 for someone else's data).
+#   order-service (status sync); the restaurant accepts one order and rejects another (which
+#   cancels it and frees the driver); a customer cancellation frees the driver; every role is
+#   refused where it should be (401 without a token, 403 for someone else's data).
 #
 # Usage: scripts/smoke-test.sh [gateway-url]          (requires curl + jq)
 #
@@ -165,7 +166,25 @@ as customer2
 call GET "/api/orders/$order"
 expect 403 "customer2 cannot read customer1's order"
 
-step "4. Kafka choreography"
+step "4. The restaurant accepts the order"
+as nobody
+call GET "/api/restaurants/$restaurant/orders"
+expect 401 "a restaurant's orders are not public"
+as restaurant1
+wait_for "/api/restaurants/$restaurant/orders?status=PLACED" "map(select(.order_id == \"$order\")) | length" 1 \
+  "restaurant1 sees the new order waiting"
+as customer2
+call POST "/api/restaurants/$restaurant/orders/$order/accept"
+expect 403 "another account cannot answer restaurant1's orders"
+as restaurant1
+call POST "/api/restaurants/$restaurant/orders/$order/accept"
+expect 200 "restaurant1 accepts the order"
+call POST "/api/restaurants/$restaurant/orders/$order/accept"
+expect 409 "an order can only be answered once"
+as customer1
+wait_for "/api/orders/$order" .status CONFIRMED "order-service marked the order CONFIRMED"
+
+step "5. Kafka choreography"
 as admin
 wait_for "/api/deliveries/order/$order" .status ASSIGNED "delivery-service assigned a driver"
 delivery=$(jq -r .id <<<"$body")
@@ -195,7 +214,7 @@ expect 200 "delivery -> DELIVERED (as $mover)"
 as customer1
 wait_for "/api/orders/$order" .status DELIVERED "order-service mirrored DELIVERED"
 
-step "5. Cancellation: order.cancelled frees the driver"
+step "6. Customer cancellation: order.cancelled frees the driver"
 as customer1
 call POST /api/orders '{"customer_id":"'"$customer"'","restaurant_id":"'"$restaurant"'","address_id":"'"$address"'","items":[{"menu_item_id":"'"$kottu"'","quantity":1}]}'
 expect 201 "place a second order"
@@ -213,8 +232,32 @@ expect 200 "cancel the second order"
 as admin
 wait_for "/api/deliveries/order/$order2" .status CANCELLED "delivery-service cancelled the delivery"
 wait_for "/api/drivers?available=true" "map(select(.id == \"$driver2\")) | length" 1 "the driver is available again"
+as restaurant1
+wait_for "/api/restaurants/$restaurant/orders" "map(select(.order_id == \"$order2\")) | .[0].status" CANCELLED \
+  "restaurant-service saw the cancellation"
+call POST "/api/restaurants/$restaurant/orders/$order2/accept"
+expect 409 "a cancelled order cannot be accepted"
 
-step "6. REST contract and access rules"
+step "7. Restaurant rejection: the order is cancelled and the driver freed"
+as customer1
+call POST /api/orders '{"customer_id":"'"$customer"'","restaurant_id":"'"$restaurant"'","address_id":"'"$address"'","items":[{"menu_item_id":"'"$dessert"'","quantity":1}]}'
+expect 201 "place a third order"
+order3=$(jq -r .id <<<"$body")
+as admin
+wait_for "/api/deliveries/order/$order3" .status ASSIGNED "driver assigned to the third order"
+driver3=$(jq -r .driver_id <<<"$body")
+as restaurant1
+wait_for "/api/restaurants/$restaurant/orders?status=PLACED" "map(select(.order_id == \"$order3\")) | length" 1 \
+  "restaurant1 sees the third order waiting"
+call POST "/api/restaurants/$restaurant/orders/$order3/reject" '{"reason":"Kitchen closed"}'
+expect 200 "restaurant1 rejects it"
+as customer1
+wait_for "/api/orders/$order3" .status CANCELLED "order-service cancelled the rejected order"
+as admin
+wait_for "/api/deliveries/order/$order3" .status CANCELLED "delivery-service cancelled its delivery"
+wait_for "/api/drivers?available=true" "map(select(.id == \"$driver3\")) | length" 1 "that driver is available again"
+
+step "8. REST contract and access rules"
 as customer1
 call GET "/api/orders?customer_id=$customer&page=1&size=100"
 expect 200 "list orders"

@@ -10,7 +10,8 @@ import org.springframework.security.web.server.context.NoOpServerSecurityContext
 
 /**
  * Authentication at the edge. Every {@code /api} request needs a valid Keycloak access token,
- * except browsing restaurants and menus ({@code GET /api/restaurants/**}). Invalid or missing
+ * except browsing restaurants and menus ({@code GET} on a restaurant or its menu items; a
+ * restaurant's orders are not public). Invalid or missing
  * tokens are rejected here with {@code 401} before any service is called.
  * <p>
  * The gateway checks <i>who</i> you are; each service checks <i>what you may do</i> (roles and
@@ -30,7 +31,8 @@ public class SecurityConfig {
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers(HttpMethod.OPTIONS).permitAll()   // CORS preflight
                         .pathMatchers("/actuator/**", "/fallback/**").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/api/restaurants/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/restaurants", "/api/restaurants/*",
+                                "/api/restaurants/*/menu-items/**").permitAll()
                         .anyExchange().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .build();

@@ -98,4 +98,5 @@ spring:
           jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:8180/auth}/realms/quickbite/protocol/openid-connect/certs
 quickbite:
   security:
-    public-get-paths: /api/restaurants/**       # browsing restaurants and menus needs no login
+    # Browsing restaurants and menus needs no login. A restaurant's orders do: they are not listed here.
+    public-get-paths: /api/restaurants, /api/restaurants/*, /api/restaurants/*/menu-items/**

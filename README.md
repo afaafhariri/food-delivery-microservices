@@ -80,7 +80,7 @@ Clients log in there, get a JWT access token, and send it as `Authorization: Bea
 | Role | Can |
 |------|-----|
 | `customer` | create one customer profile (`POST /api/customers`, `GET /api/customers/me`); manage its addresses; place, read, list and cancel **its own** orders; read its order history |
-| `restaurant` | create restaurants; change **its own** restaurants and their menus |
+| `restaurant` | create restaurants; change **its own** restaurants and their menus; see, accept and reject **its own** restaurants' orders |
 | `driver` | register once as a driver (`POST /api/drivers`, `GET /api/drivers/me`); update its profile; see and move **the deliveries assigned to it** |
 | `admin` | everything, including listing all customers, drivers, orders and deliveries, and setting an order's status directly |
 
@@ -111,11 +111,13 @@ All JSON bodies, requests and responses, are **snake_case** (`cuisine_type`, `ad
 graph LR
     OS[Order Service] -->|order.placed| DS[Delivery Service]
     OS -->|order.placed| CS[Customer Service]
+    OS -->|order.placed| RS[Restaurant Service]
     OS -->|order.cancelled| DS
-    RS[Restaurant Service] -->|restaurant.order.response| OS
+    OS -->|order.cancelled| RS
+    RS -->|restaurant.order.response| OS
     DS -->|delivery.status.updated| OS
-    RS -->|restaurant.menu.updated| Future
-    CS -->|customer.notification| Console
+    RS -->|restaurant.menu.updated| OS
+    CS -->|customer.notification| NS[Notification sender, in customer-service: logs it]
 ```
 
 `order.cancelled` is published whenever an order becomes CANCELLED: the customer cancels it
@@ -123,6 +125,23 @@ graph LR
 then cancels the delivery if it is still ASSIGNED and frees the driver. A delivery that is already picked up
 is left alone. Kafka gives no ordering between topics, so the cancellation can arrive before `order.placed`.
 delivery-service records cancelled orders in `cancelled_orders` and never assigns a driver to one.
+
+**Restaurants accept or reject orders.** restaurant-service keeps its own list of the orders placed with each
+restaurant (from `order.placed` and `order.cancelled`). The restaurant's owner answers each waiting order:
+
+| Endpoint (owner or admin) | Effect |
+|---------------------------|--------|
+| `GET /api/restaurants/{id}/orders?status=PLACED` | the restaurant's orders, newest first (`status` optional: `PLACED` = waiting, `ACCEPTED`, `REJECTED`, `CANCELLED`) |
+| `POST /api/restaurants/{id}/orders/{order_id}/accept` | publishes `restaurant.order.response` CONFIRMED; order-service moves the order from PLACED to CONFIRMED |
+| `POST /api/restaurants/{id}/orders/{order_id}/reject` with `{"reason": "..."}` | publishes REJECTED; order-service cancels the order, which frees its driver |
+
+An order can be answered once, and only while waiting (otherwise `409`). order-service applies a confirmation only
+to an order that is still PLACED, so a late confirmation never revives a cancelled order.
+
+**Notifications and menu updates are logged.** `customer.notification` is read by a notification sender in
+customer-service (its own consumer group, `notification-sender`), which logs each one as
+`NOTIFY customer=<id> type=<type>: <message>`; replace the log line with an email or SMS client to send real ones.
+order-service logs `restaurant.menu.updated` (it prices every order live over gRPC, so it keeps no menu copy).
 
 Every topic also has a dead-letter topic, `<topic>.DLT`, for events a consumer could not process.
 

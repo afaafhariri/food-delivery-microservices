@@ -22,4 +22,11 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     @Modifying
     @Query("update Order o set o.status = :status, o.updatedAt = :now where o.id = :id")
     int updateStatus(@Param("id") UUID id, @Param("status") OrderStatus status, @Param("now") Instant now);
+
+    /** Like {@link #updateStatus}, but only if the order is still in {@code expected}; returns 0 otherwise. */
+    @Transactional
+    @Modifying
+    @Query("update Order o set o.status = :status, o.updatedAt = :now where o.id = :id and o.status = :expected")
+    int updateStatusIf(@Param("id") UUID id, @Param("expected") OrderStatus expected,
+                       @Param("status") OrderStatus status, @Param("now") Instant now);
 }
