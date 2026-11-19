@@ -66,8 +66,8 @@ RUN addgroup -S -g 10001 app && \
 #        startup  4.6-5.2 s -> 2.2-3.0 s      RSS  ~290 MB -> ~257 MB
 #    Cost: ~140-170 MB per image (the app.aot layer). --build-arg AOT_CACHE=false
 #    trades that back for slower starts.
-#    No DB or Kafka is needed for training: Liquibase and Hibernate's JDBC
-#    metadata lookup are disabled for that run only.
+#    No DB or Kafka is needed for training: Liquibase, Hibernate's JDBC
+#    metadata lookup and Kafka topic creation are disabled for that run only.
 # ---------------------------------------------------------------------------
 FROM runtime AS app
 ARG AOT_CACHE=true
@@ -84,6 +84,7 @@ RUN if [ "${AOT_CACHE}" = "true" ]; then \
         -Dspring.context.exit=onRefresh \
         -Dspring.main.banner-mode=off \
         -Dspring.liquibase.enabled=false \
+        -Dspring.kafka.admin.auto-create=false \
         -Dspring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false \
         -Dspring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect \
         -jar app.jar && \

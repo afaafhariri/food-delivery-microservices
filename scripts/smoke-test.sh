@@ -277,6 +277,10 @@ expect 403 "drivers cannot list orders"
 as admin
 call GET "/api/drivers?available=true"
 expect 200 "admin lists available drivers"
+call PATCH "/api/orders/$order/status" '{"status":"PLACED"}'
+expect 409 "a delivered order cannot go back to PLACED, even for an admin"
+call PATCH "/api/deliveries/$delivery/status" '{"status":"PICKED_UP"}'
+expect 409 "a delivered delivery cannot be picked up again"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

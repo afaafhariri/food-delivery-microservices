@@ -67,6 +67,20 @@ class OrderCancellationTest {
     }
 
     @Test
+    void pickedUpOrdersCanNoLongerBeCancelled() {
+        Order order = order(OrderStatus.PICKED_UP);
+        when(repository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.updateStatus(order.getId(), "CANCELLED"))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).status().value()).isEqualTo(409));
+        assertThat(service.cancelByRestaurant(order.getId(), "too late")).isTrue();   // ignored, not an error
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PICKED_UP);
+        verify(events, never()).publishEvent(any());
+    }
+
+    @Test
     void restaurantRejectionPublishesWithItsReason() {
         Order order = order(OrderStatus.PLACED);
         when(repository.findById(order.getId())).thenReturn(Optional.of(order));

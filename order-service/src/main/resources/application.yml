@@ -32,6 +32,8 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    admin:
+      modify-topic-configs: true               # existing topics get the declared retention (messaging module)
     producer:
       acks: all
       properties:

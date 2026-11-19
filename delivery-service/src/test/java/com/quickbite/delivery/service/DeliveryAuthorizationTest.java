@@ -46,6 +46,17 @@ class DeliveryAuthorizationTest {
     }
 
     @Test
+    void evenTheAssignedDriverCannotSkipThePickup() {
+        Delivery delivery = delivery("driver-1");
+        signIn("driver-1", "driver");
+
+        assertThatThrownBy(() -> service.updateStatus(delivery.getId(), "DELIVERED"))
+                .isInstanceOf(com.quickbite.delivery.web.ApiException.class)
+                .hasMessageContaining("from ASSIGNED to DELIVERED");
+        assertThat(delivery.getStatus()).isEqualTo(DeliveryStatus.ASSIGNED);
+    }
+
+    @Test
     void otherDriversAndCustomersCannotSeeOrMoveIt() {
         Delivery delivery = delivery("driver-1");
 

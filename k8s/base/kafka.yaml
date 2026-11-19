@@ -74,7 +74,8 @@ spec:
             # A subdirectory: some volume types add "lost+found" at the mount
             # root, which Kafka would refuse as a log directory.
             - { name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data }
-            - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "true" }
+            # Topics are declared by the services at startup (messaging module), not created on first use.
+            - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "false" }
             - { name: KAFKA_NUM_PARTITIONS, value: "3" }
             - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
             - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }

@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,6 +23,13 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     @Modifying
     @Query("update Order o set o.status = :status, o.updatedAt = :now where o.id = :id")
     int updateStatus(@Param("id") UUID id, @Param("status") OrderStatus status, @Param("now") Instant now);
+
+    /** Moves the order to {@code status} only if it is currently in one of {@code from}; returns 0 otherwise. */
+    @Transactional
+    @Modifying
+    @Query("update Order o set o.status = :status, o.updatedAt = :now where o.id = :id and o.status in :from")
+    int updateStatusFrom(@Param("id") UUID id, @Param("from") Collection<OrderStatus> from,
+                         @Param("status") OrderStatus status, @Param("now") Instant now);
 
     /** Like {@link #updateStatus}, but only if the order is still in {@code expected}; returns 0 otherwise. */
     @Transactional

@@ -77,7 +77,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+      # Same script as the Kubernetes base (single copy); runs once, on an empty volume.
+      - ./k8s/base/postgres-init/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
     shm_size: 128m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quickbite -d postgres"]
@@ -108,7 +109,7 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_LOG_DIRS: /var/lib/kafka/data
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topics are declared by the services (messaging module)
       KAFKA_NUM_PARTITIONS: 3
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1

@@ -33,11 +33,18 @@ class OutboxIntegrationTest {
 
     @Container
     @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine");
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine")
+            .withStartupAttempts(3);
 
+    /*
+     * Up to 3 start attempts: Testcontainers copies a start script into the Kafka container and
+     * runs it at once, and now and then the kernel still has the file open for writing
+     * ("Text file busy", exit 126). A fresh container avoids the race; this is not a test failure.
+     */
     @Container
     @ServiceConnection
-    static KafkaContainer kafka = new KafkaContainer("apache/kafka:4.1.2");
+    static KafkaContainer kafka = new KafkaContainer("apache/kafka:4.1.2")
+            .withStartupAttempts(3);
 
     @Autowired
     Outbox outbox;

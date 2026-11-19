@@ -145,6 +145,18 @@ order-service logs `restaurant.menu.updated` (it prices every order live over gR
 
 Every topic also has a dead-letter topic, `<topic>.DLT`, for events a consumer could not process.
 
+**Topics are declared, not auto-created.** The broker's auto-creation is off. Every service declares the full list
+([`Topics`](messaging/src/main/java/com/quickbite/messaging/Topics.java)) at startup, so whichever starts first
+creates them: 3 partitions and 7 days' retention for each topic, 1 partition and 30 days for each `.DLT`, replication
+factor 1 (one broker). Change them under `quickbite.messaging.topics.*`; existing topics are updated to match
+(`spring.kafka.admin.modify-topic-configs`).
+
+**Statuses only move forward.** Orders: `PLACED → CONFIRMED → PREPARING → READY → PICKED_UP → DELIVERED`, with
+`CANCELLED` possible until pickup (a driver may also pick up an order the kitchen hasn't marked ready). Deliveries:
+`ASSIGNED → PICKED_UP → EN_ROUTE → DELIVERED`, cancellable only while `ASSIGNED`. `DELIVERED` and `CANCELLED` are
+final. Any other change, even by an admin, is refused with `409`; setting the current status again is a no-op. Events
+follow the same rules: a late delivery update never revives a cancelled order.
+
 ## Reliable messaging: transactional outbox
 
 Services never call Kafka from business code. The shared [`messaging`](messaging) module handles it:
@@ -428,7 +440,6 @@ quickbite/
 │   ├── jvm.Dockerfile        (one Dockerfile for all services)
 │   └── jvm.options           (JVM flags, used for AOT training and at runtime)
 ├── scripts/
-│   ├── init-databases.sql
 │   ├── seed-data.sql
 │   └── smoke-test.sh
 ├── grpc-contracts/           (.proto files + generated stubs)
