@@ -3,6 +3,8 @@ databaseChangeLog:
       file: db/changelog/changesets/001-create-tables.yaml
   - include:
       file: db/changelog/changesets/002-restaurant-owner.sql
+  - include:
+      file: db/changelog/changesets/003-restaurant-orders.sql
   # Outbox and inbox tables (from the messaging module)
   - include:
       file: db/changelog/messaging/001-outbox-inbox.sql

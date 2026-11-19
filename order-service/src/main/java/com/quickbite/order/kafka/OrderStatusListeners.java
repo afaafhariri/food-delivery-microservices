@@ -75,7 +75,15 @@ public class OrderStatusListeners {
             throw new NonRetryableEventException("restaurant.order.response without orderId: " + record.value());
         }
         if ("CONFIRMED".equals(event.status())) {
-            apply(event.orderId(), OrderStatus.CONFIRMED, "restaurant");
+            // Only a waiting order can be confirmed: never revive a cancelled or delivered one.
+            int updated = repository.updateStatusIf(event.orderId(), OrderStatus.PLACED, OrderStatus.CONFIRMED,
+                    Instant.now());
+            if (updated == 0) {
+                log.warn("restaurant confirmed order {}, but it is unknown or no longer PLACED; ignoring",
+                        event.orderId());
+            } else {
+                log.info("order {} -> CONFIRMED (from restaurant event)", event.orderId());
+            }
         } else if (!orders.cancelByRestaurant(event.orderId(), event.reason())) {
             // Through OrderService, so the cancellation is announced on order.cancelled.
             log.warn("restaurant event for unknown order {}", event.orderId());
