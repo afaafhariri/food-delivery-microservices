@@ -6,6 +6,8 @@ import com.quickbite.restaurant.dto.RestaurantResponse;
 import com.quickbite.restaurant.exception.ResourceNotFoundException;
 import com.quickbite.restaurant.model.Restaurant;
 import com.quickbite.restaurant.repository.RestaurantRepository;
+import com.quickbite.security.CurrentUser;
+import com.quickbite.security.Roles;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -22,10 +24,13 @@ import java.util.UUID;
 public class RestaurantService {
 
     private final RestaurantRepository restaurantRepository;
+    private final CurrentUser currentUser;
 
     @Transactional
     public RestaurantResponse createRestaurant(RestaurantRequest request) {
+        currentUser.requireAnyRole(Roles.RESTAURANT);
         Restaurant restaurant = Restaurant.builder()
+                .ownerId(currentUser.id())
                 .name(request.getName())
                 .address(request.getAddress())
                 .cuisineType(request.getCuisineType())
@@ -65,7 +70,7 @@ public class RestaurantService {
 
     @Transactional
     public RestaurantResponse updateRestaurant(UUID id, RestaurantRequest request) {
-        Restaurant restaurant = findRestaurantOrThrow(id);
+        Restaurant restaurant = findOwnedRestaurant(id);
         restaurant.setName(request.getName());
         restaurant.setAddress(request.getAddress());
         restaurant.setCuisineType(request.getCuisineType());
@@ -77,7 +82,7 @@ public class RestaurantService {
 
     @Transactional
     public void deleteRestaurant(UUID id) {
-        Restaurant restaurant = findRestaurantOrThrow(id);
+        Restaurant restaurant = findOwnedRestaurant(id);
         restaurant.setActive(false);
         restaurantRepository.save(restaurant);
         log.info("Soft-deleted restaurant: id={}", id);
@@ -88,6 +93,13 @@ public class RestaurantService {
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurant", "id", id));
     }
 
+    /** The restaurant, if the caller is its owner or an admin; otherwise 403. */
+    public Restaurant findOwnedRestaurant(UUID id) {
+        Restaurant restaurant = findRestaurantOrThrow(id);
+        currentUser.requireOwnerOrAdmin(restaurant.getOwnerId());
+        return restaurant;
+    }
+
     private RestaurantResponse mapToResponse(Restaurant restaurant) {
         return RestaurantResponse.builder()
                 .id(restaurant.getId())
@@ -96,6 +108,7 @@ public class RestaurantService {
                 .cuisineType(restaurant.getCuisineType())
                 .operatingHours(restaurant.getOperatingHours())
                 .active(restaurant.isActive())
+                .ownerId(restaurant.getOwnerId())
                 .createdAt(restaurant.getCreatedAt())
                 .updatedAt(restaurant.getUpdatedAt())
                 .build();

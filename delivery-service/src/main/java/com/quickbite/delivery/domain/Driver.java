@@ -39,6 +39,10 @@ public class Driver {
     @Column(nullable = false)
     private boolean available = true;
 
+    /** Keycloak user id of the driver account; null means admin-managed. */
+    @Column(name = "user_id", length = 64, unique = true)
+    private String userId;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

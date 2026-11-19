@@ -16,7 +16,9 @@ import java.util.stream.Collectors;
 public class OrderHistoryService {
 
     private final OrderHistoryRepository orderHistoryRepository;
+    private final CustomerService customerService;
 
+    /** Called by the order.placed listener (no user): no access check. */
     @Transactional
     public OrderHistory save(OrderHistory orderHistory) {
         return orderHistoryRepository.save(orderHistory);
@@ -24,6 +26,7 @@ public class OrderHistoryService {
 
     @Transactional(readOnly = true)
     public List<OrderHistoryResponse> listByCustomerId(UUID customerId) {
+        customerService.findAccessible(customerId);
         return orderHistoryRepository.findByCustomerIdOrderByOrderDateDesc(customerId).stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());

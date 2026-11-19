@@ -26,7 +26,7 @@ public class MenuItemService {
 
     @Transactional
     public MenuItemResponse addMenuItem(UUID restaurantId, MenuItemRequest request) {
-        Restaurant restaurant = restaurantService.findRestaurantOrThrow(restaurantId);
+        Restaurant restaurant = restaurantService.findOwnedRestaurant(restaurantId);
 
         MenuItem menuItem = MenuItem.builder()
                 .restaurant(restaurant)
@@ -55,7 +55,7 @@ public class MenuItemService {
 
     @Transactional
     public MenuItemResponse updateMenuItem(UUID restaurantId, UUID itemId, MenuItemRequest request) {
-        restaurantService.findRestaurantOrThrow(restaurantId);
+        restaurantService.findOwnedRestaurant(restaurantId);
 
         MenuItem menuItem = menuItemRepository.findByRestaurantIdAndId(restaurantId, itemId)
                 .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", itemId));
@@ -75,7 +75,7 @@ public class MenuItemService {
 
     @Transactional
     public void removeMenuItem(UUID restaurantId, UUID itemId) {
-        restaurantService.findRestaurantOrThrow(restaurantId);
+        restaurantService.findOwnedRestaurant(restaurantId);
 
         MenuItem menuItem = menuItemRepository.findByRestaurantIdAndId(restaurantId, itemId)
                 .orElseThrow(() -> new ResourceNotFoundException("MenuItem", "id", itemId));

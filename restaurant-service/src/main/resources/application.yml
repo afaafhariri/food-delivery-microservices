@@ -84,3 +84,18 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     operationsSorter: method
+
+---
+# Authentication: every /api request needs a Keycloak access token (see the security module).
+# Keys come from the realm's JWKS endpoint, reached inside the network (AUTH_INTERNAL_URL); the
+# token's issuer must be the public Keycloak URL that clients got it from (AUTH_PUBLIC_URL).
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_PUBLIC_URL:http://localhost:8180/auth}/realms/quickbite
+          jwk-set-uri: ${AUTH_INTERNAL_URL:http://localhost:8180/auth}/realms/quickbite/protocol/openid-connect/certs
+quickbite:
+  security:
+    public-get-paths: /api/restaurants/**       # browsing restaurants and menus needs no login

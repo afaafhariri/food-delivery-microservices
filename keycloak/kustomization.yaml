@@ -1,0 +1,24 @@
+# Keycloak for Kubernetes, as a Kustomize *component* that both overlays include:
+#   components:
+#     - ../../../keycloak
+# It adds the Keycloak Deployment and Service, the realm (roles and client, no users), and the
+# token settings every service and the gateway read from the quickbite-common ConfigMap.
+#
+# Overlays must set AUTH_PUBLIC_URL (the URL clients reach Keycloak at, ending in /auth) by
+# merging it into quickbite-common, and the quickbite-db Secret needs keycloak_admin_password.
+# The local overlay also includes keycloak/dev-users, which adds test users.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - k8s/keycloak.yaml
+
+configMapGenerator:
+  - name: quickbite-common
+    behavior: merge
+    literals:
+      # Inside the cluster the services fetch the realm's signing keys from here.
+      - AUTH_INTERNAL_URL=http://keycloak:8080/auth
+  - name: keycloak-realm
+    files:
+      - quickbite-realm.json=realm/quickbite-realm.json

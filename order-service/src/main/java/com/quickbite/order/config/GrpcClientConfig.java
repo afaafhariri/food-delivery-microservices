@@ -2,6 +2,7 @@ package com.quickbite.order.config;
 
 import com.quickbite.grpc.customer.v1.CustomerDirectoryGrpc;
 import com.quickbite.grpc.restaurant.v1.RestaurantCatalogGrpc;
+import com.quickbite.order.grpc.BearerTokenForwarder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.grpc.client.ChannelBuilderOptions;
@@ -15,6 +16,7 @@ import java.util.Map;
  * <p>
  * Channels are long-lived HTTP/2 connections (created lazily, closed by Spring on shutdown).
  * A service config adds transparent retries for {@code UNAVAILABLE}, e.g. while a peer restarts.
+ * {@link BearerTokenForwarder} sends the caller's access token: the gRPC servers require one.
  * Per-call deadlines are applied by {@link com.quickbite.order.grpc.OrderValidationClient}.
  */
 @Configuration(proxyBeanMethods = false)
@@ -44,6 +46,7 @@ public class GrpcClientConfig {
                 "name", List.of(Map.of("service", serviceName)),
                 "retryPolicy", retryPolicy)));
         return ChannelBuilderOptions.defaults()
-                .withCustomizer((name, builder) -> builder.enableRetry().defaultServiceConfig(serviceConfig));
+                .withCustomizer((name, builder) -> builder.enableRetry().defaultServiceConfig(serviceConfig)
+                        .intercept(new BearerTokenForwarder()));
     }
 }

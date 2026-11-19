@@ -14,4 +14,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
     List<Customer> findByActiveTrue();
 
     Optional<Customer> findByEmail(String email);
+
+    Optional<Customer> findByUserId(String userId);
+
+    boolean existsByUserId(String userId);
 }

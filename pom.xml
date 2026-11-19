@@ -20,6 +20,7 @@
     <modules>
         <module>grpc-contracts</module>
         <module>messaging</module>
+        <module>security</module>
         <module>restaurant-service</module>
         <module>order-service</module>
         <module>delivery-service</module>
@@ -50,6 +51,11 @@
             <dependency>
                 <groupId>com.quickbite</groupId>
                 <artifactId>messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.quickbite</groupId>
+                <artifactId>security</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -10,16 +10,28 @@ namespace: quickbite # also places the Secret generated below
 
 resources:
   - ../../base
+  - keycloak-external.yaml
 
-# Prometheus, Tempo and Grafana; also turns on trace export in every service.
 components:
+  # Prometheus, Tempo and Grafana; also turns on trace export in every service.
   - ../../../observability
+  # Keycloak, with test users (password quickbite123) for local development.
+  - ../../../keycloak
+  - ../../../keycloak/dev-users
+
+# Clients reach Keycloak on localhost:8180 (keycloak-external.yaml), as with Docker Compose.
+configMapGenerator:
+  - name: quickbite-common
+    behavior: merge
+    literals:
+      - AUTH_PUBLIC_URL=http://localhost:8180/auth
 
 secretGenerator:
   - name: quickbite-db
     literals:
       - username=quickbite
       - password=quickbite123 # development only, same as docker-compose.yml
+      - keycloak_admin_password=admin # Keycloak admin console, development only
 
 patches:
   # Docker Desktop and k3s map LoadBalancer Services to localhost / the node
@@ -59,6 +71,13 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/memory
         value: 128Mi
+  - target:
+      kind: Deployment
+      name: keycloak
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
   - target:
       kind: StatefulSet
       name: kafka

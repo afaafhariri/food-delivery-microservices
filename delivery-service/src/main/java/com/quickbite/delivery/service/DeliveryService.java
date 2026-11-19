@@ -9,12 +9,15 @@ import com.quickbite.delivery.domain.Driver;
 import com.quickbite.delivery.domain.DriverRepository;
 import com.quickbite.delivery.dto.DeliveryDtos.DeliveryResponse;
 import com.quickbite.delivery.web.ApiException;
+import com.quickbite.security.CurrentUser;
+import com.quickbite.security.Roles;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +35,7 @@ public class DeliveryService {
     private final DriverRepository drivers;
     private final CancelledOrderRepository cancelledOrders;
     private final ApplicationEventPublisher events;
+    private final CurrentUser currentUser;
 
     /**
      * Creates the delivery for a newly placed order. Idempotent on {@code orderId}, so Kafka
@@ -104,25 +108,39 @@ public class DeliveryService {
 
     @Transactional(readOnly = true)
     public DeliveryResponse get(UUID id) {
-        return deliveries.findWithDriverById(id)
-                .map(DeliveryService::toResponse)
+        Delivery delivery = deliveries.findWithDriverById(id)
                 .orElseThrow(() -> ApiException.notFound("delivery not found"));
+        requireAssignedDriverOrAdmin(delivery);
+        return toResponse(delivery);
     }
 
     @Transactional(readOnly = true)
     public DeliveryResponse getByOrderId(UUID orderId) {
-        return deliveries.findByOrderId(orderId)
-                .map(DeliveryService::toResponse)
+        Delivery delivery = deliveries.findByOrderId(orderId)
                 .orElseThrow(() -> ApiException.notFound("delivery not found for order"));
+        requireAssignedDriverOrAdmin(delivery);
+        return toResponse(delivery);
     }
 
     @Transactional(readOnly = true)
     public List<DeliveryResponse> list(UUID driverId, String rawStatus) {
+        // Admins see every delivery; a driver only the deliveries assigned to them.
+        String onlyDriverUser;
+        if (currentUser.isAdmin()) {
+            onlyDriverUser = null;
+        } else if (currentUser.hasRole(Roles.DRIVER)) {
+            onlyDriverUser = currentUser.id();
+        } else {
+            throw new AccessDeniedException("only drivers and admins can list deliveries");
+        }
         DeliveryStatus status = rawStatus == null || rawStatus.isBlank() ? null
                 : DeliveryStatus.parse(rawStatus)
                         .orElseThrow(() -> ApiException.badRequest("invalid delivery status: " + rawStatus));
         Specification<Delivery> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>(2);
+            if (onlyDriverUser != null) {
+                predicates.add(cb.equal(root.get("driver").get("userId"), onlyDriverUser));
+            }
             if (driverId != null) {
                 predicates.add(cb.equal(root.get("driver").get("id"), driverId));
             }
@@ -145,6 +163,7 @@ public class DeliveryService {
                 .orElseThrow(() -> ApiException.badRequest("invalid delivery status: " + rawStatus));
         Delivery delivery = deliveries.findWithDriverById(id)
                 .orElseThrow(() -> ApiException.notFound("delivery not found"));
+        requireAssignedDriverOrAdmin(delivery);
         if (delivery.getStatus() == DeliveryStatus.CANCELLED) {
             throw ApiException.badRequest("delivery was cancelled");
         }
@@ -159,6 +178,12 @@ public class DeliveryService {
         events.publishEvent(new DeliveryStatusChanged(delivery.getId(), delivery.getOrderId(),
                 driver != null ? driver.getId() : null, status.name()));
         return toResponse(delivery);
+    }
+
+    /** HTTP access to a delivery: its assigned driver's account, or an admin. */
+    private void requireAssignedDriverOrAdmin(Delivery delivery) {
+        Driver driver = delivery.getDriver();
+        currentUser.requireOwnerOrAdmin(driver != null ? driver.getUserId() : null);
     }
 
     static DeliveryResponse toResponse(Delivery d) {

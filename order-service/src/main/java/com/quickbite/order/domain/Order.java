@@ -41,6 +41,10 @@ public class Order {
     @Column(name = "restaurant_id", nullable = false)
     private UUID restaurantId;
 
+    /** Keycloak user id of the customer account that placed the order; null if admin-managed. */
+    @Column(name = "customer_user_id", length = 64)
+    private String customerUserId;
+
     @Column(name = "delivery_address", nullable = false)
     private String deliveryAddress;
 

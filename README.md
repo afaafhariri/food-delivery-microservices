@@ -37,6 +37,7 @@ All services are **Java 25 / Spring Boot 4**, built from one Maven reactor.
 | Language / runtime | Java 25 (LTS), virtual threads, compact object headers, AOT cache         |
 | Framework          | Spring Boot 4.0, Spring Data JPA (Hibernate 7), Jackson 3                 |
 | API Gateway        | Spring Cloud Gateway (WebFlux)                                            |
+| Identity           | Keycloak 26 (OAuth 2.0 / OpenID Connect), JWT access tokens, Spring Security 7 resource servers |
 | Sync RPC           | gRPC via Spring gRPC 1.0 (contracts in `grpc-contracts/`)                 |
 | Messaging          | Apache Kafka 4.1 (KRaft, no ZooKeeper), transactional outbox + inbox      |
 | Resilience         | Resilience4j circuit breakers (gRPC calls, gateway routes), dead-letter topics |
@@ -57,8 +58,52 @@ Kafka carries asynchronous events; gRPC is used where order-service needs an ans
 | `quickbite.customer.v1.CustomerDirectory/ResolveCustomer` | customer-service :9094   | Customer exists and is active; resolves a saved `address_id` to a delivery address     |
 
 Clients can no longer set prices: `unit_price` and `menu_item_name` in the request are ignored.
-Validation failures return `400`, and an unreachable dependency returns `503`. Inspect the services
-with reflection (`grpcurl -plaintext localhost:9091 list`) after publishing the port.
+Validation failures return `400`, and an unreachable dependency returns `503`.
+
+gRPC calls are authenticated like HTTP ones: order-service forwards the caller's own access token, so
+the user's identity reaches restaurant-service and customer-service. To inspect a service with
+reflection, publish its port and pass a token:
+`grpcurl -plaintext -H "authorization: Bearer $TOKEN" localhost:9091 list`.
+
+## Authentication and authorisation
+
+[Keycloak](keycloak/README.md) is the identity provider (realm `quickbite`, served under `/auth`).
+Clients log in there, get a JWT access token, and send it as `Authorization: Bearer <token>`.
+
+- **The gateway** rejects requests without a valid token with `401`. Only browsing restaurants and menus
+  (`GET /api/restaurants/**`) is public.
+- **Each service** validates the token again (signature with the realm's keys, issuer, expiry) and checks
+  roles and ownership, answering `403` for anything else. Services own their data by Keycloak user id:
+  `restaurants.owner_id`, `customers.user_id`, `drivers.user_id`, and `orders.customer_user_id`.
+- **Shared code** lives in the [`security`](security) module (`@EnableQuickBiteSecurity`, `CurrentUser`).
+
+| Role | Can |
+|------|-----|
+| `customer` | create one customer profile (`POST /api/customers`, `GET /api/customers/me`); manage its addresses; place, read, list and cancel **its own** orders; read its order history |
+| `restaurant` | create restaurants; change **its own** restaurants and their menus |
+| `driver` | register once as a driver (`POST /api/drivers`, `GET /api/drivers/me`); update its profile; see and move **the deliveries assigned to it** |
+| `admin` | everything, including listing all customers, drivers, orders and deliveries, and setting an order's status directly |
+
+Rows created before authentication existed (and the seed data) have no owner, so only admins can
+change them. Kafka consumers and the outbox are not user requests and are not checked.
+
+**Development users** (Compose and the local Kubernetes overlay, password `quickbite123`): `admin`,
+`customer1`, `customer2`, `restaurant1`, `driver1`. Get a token with:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8180/auth/realms/quickbite/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=quickbite-app -d username=customer1 -d password=quickbite123 | jq -r .access_token)
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/api/customers/me
+```
+
+The `quickbite-app` client also supports the authorization code flow with PKCE for browser and mobile apps
+(redirect URIs `http://localhost:3000/*` and `http://localhost:5173/*`; add yours in the realm). The
+password grant used above is for scripts and the smoke test; disable *Direct access grants* on the client
+if you don't need it. Keycloak's admin console is at <http://localhost:8180/auth/admin> (`admin` / `admin`
+in development). In production the realm has **no users**: create them, and assign roles, in the admin
+console (`kubectl -n quickbite port-forward svc/keycloak 8180:8080`).
+
+All JSON bodies, requests and responses, are **snake_case** (`cuisine_type`, `address_line`, `total_amount`).
 
 ## Kafka Event Flow
 
@@ -145,8 +190,9 @@ Kubernetes overlays set it, so a service started from the IDE stays quiet.
 ## Prerequisites
 
 - Docker Desktop (Docker Engine 20.10+ and Docker Compose V2)
-- About 3.5 GB of RAM for Docker (Docker Desktop → Settings → Resources). The services, Postgres and Kafka
-  run within ~2.4 GB of memory limits, and Prometheus, Tempo and Grafana add up to ~0.9 GB.
+- About 4 GB of RAM for Docker (Docker Desktop → Settings → Resources). The services, Postgres and Kafka
+  run within ~2.4 GB of memory limits, Prometheus, Tempo and Grafana add up to ~0.9 GB, and Keycloak ~0.75 GB
+  (limits; actual use is lower).
 
 ## Quick Start
 
@@ -161,14 +207,16 @@ docker compose up --build
 # Wait for all services to be healthy (the first build downloads dependencies)
 ```
 
-Run the end-to-end smoke test (REST → gRPC → Kafka → DB) once everything is healthy:
+Run the end-to-end smoke test (login → REST → gRPC → Kafka → DB, plus 401/403 checks) once everything is
+healthy. It logs in as the development users:
 
 ```bash
 scripts/smoke-test.sh
 ```
 
-Once running, all services are accessible through the API Gateway at `http://localhost:8080`, and
-Grafana at `http://localhost:3000`.
+Once running, all services are accessible through the API Gateway at `http://localhost:8080`, Keycloak
+at `http://localhost:8180/auth`, and Grafana at `http://localhost:3000`. The first start of Keycloak takes
+about a minute (it builds and creates its database).
 
 All published ports are bound to `127.0.0.1`, so the stack is reachable from your machine only. The
 services have no built-in database password: to run one outside Docker (e.g. from your IDE), set
@@ -191,7 +239,7 @@ After all services are running, you can load seed data:
 docker exec -i quickbite-postgres psql -U quickbite < scripts/seed-data.sql
 ```
 
-This creates:
+This creates (all admin-managed: no account owns them, so only `admin` can change them):
 - 3 restaurants with 5 menu items each
 - 5 customers with 2 addresses each
 - 2 delivery drivers
@@ -215,10 +263,12 @@ Manifests live in [`k8s/`](k8s) as Kustomize (built into `kubectl`, nothing else
 | `k8s/overlays/prod`   | GHCR images, password from a git-ignored file, Ingress with TLS, NetworkPolicies          |
 | `k8s/vm`              | VM scripts used by `scripts/cloud-deploy.sh`: k3s + cert-manager bootstrap, deploy        |
 | `observability`       | Kustomize component used by both overlays: Prometheus, Tempo, Grafana; turns on trace export |
+| `keycloak`            | Kustomize component used by both overlays: Keycloak + realm; `keycloak/dev-users` adds test users (local only) |
 
-The stack requests about 2.6 GiB of memory, plus about 0.6 GiB for observability, so use a node with at
-least 4 GB of RAM (8 GB is comfortable). Only the gateway's `/api` paths are exposed. Postgres, Kafka,
-gRPC, the service REST ports, `/actuator` and Grafana stay inside the cluster. Open Grafana with
+The stack requests about 2.6 GiB of memory, plus about 0.6 GiB for observability and 0.6 GiB for Keycloak,
+so use a node with at least 4 GB of RAM (8 GB is comfortable). Only the gateway's `/api` paths and Keycloak's
+login and token endpoints (`/auth/realms`, `/auth/resources`) are exposed. Postgres, Kafka, gRPC, the service
+REST ports, `/actuator`, Keycloak's admin console and Grafana stay inside the cluster. Open Grafana with
 `kubectl -n quickbite port-forward svc/grafana 3000:3000`. To run without observability, remove the
 `components:` entry from the overlay.
 
@@ -270,9 +320,15 @@ NetworkPolicies, and a generated database password. Only ports 80 and 443 are ex
    The first run installs k3s and cert-manager (about 2 minutes); later runs only redeploy.
    `TAG=sha-<commit>` deploys a specific build, and `HOST=api.example.com` uses your own domain
    instead of the free `<ip>.sslip.io` name.
-4. **Test:**
+4. **Users.** The production realm has no users. Open the admin console through an SSH tunnel
+   (`ssh -L 8180:localhost:8180 root@203.0.113.10 sudo k3s kubectl -n quickbite port-forward svc/keycloak 8180:8080`,
+   then <http://localhost:8180/auth/admin>; user `admin`, password `keycloak_admin_password` from
+   `/etc/quickbite/secrets.env` on the VM). In realm `quickbite`, create users and assign realm roles.
+   For the smoke test, create `admin`, `customer1`, `customer2`, `restaurant1` and `driver1` with the
+   matching roles and one password, and pass it as `SMOKE_PASSWORD`.
+5. **Test:**
    ```bash
-   scripts/smoke-test.sh http://203.0.113.10.sslip.io
+   SMOKE_PASSWORD=<their password> scripts/smoke-test.sh http://203.0.113.10.sslip.io
    ```
 
 Run the script again at any time to redeploy. When you're done, **destroy the VM** in the provider's
@@ -289,10 +345,13 @@ console. These sizes bill roughly $0.07–0.09 an hour, but a stopped VM on Azur
    [cert-manager](https://cert-manager.io/docs/installation/) and create a `ClusterIssuer` named
    `letsencrypt` (ACME HTTP-01 through the `traefik` ingress class).
 3. **Configure.** Set your domain (and ingress class, if not Traefik) in
-   [`k8s/overlays/prod/ingress.yaml`](k8s/overlays/prod/ingress.yaml), and create the secret file:
+   [`k8s/overlays/prod/ingress.yaml`](k8s/overlays/prod/ingress.yaml) and in `AUTH_PUBLIC_URL`
+   (`https://<your-domain>/auth`) in [`k8s/overlays/prod/kustomization.yaml`](k8s/overlays/prod/kustomization.yaml),
+   and create the secret file:
    ```bash
-   cp k8s/overlays/prod/secrets.env.example k8s/overlays/prod/secrets.env   # set a strong password
+   cp k8s/overlays/prod/secrets.env.example k8s/overlays/prod/secrets.env   # set strong passwords
    ```
+   After the first deploy, create users and give them roles in Keycloak's admin console.
 4. **Deploy.**
    ```bash
    kubectl apply -k k8s/overlays/prod
@@ -332,6 +391,7 @@ quickbite/
 ├── docker-compose.yml
 ├── k8s/                      (Kustomize: base + local/prod overlays)
 ├── observability/            (Prometheus, Tempo, Grafana config + dashboard; Kustomize component)
+├── keycloak/                 (realm files; Kustomize component; dev users)
 ├── .github/workflows/        (image build -> GHCR)
 ├── docker/
 │   ├── jvm.Dockerfile        (one Dockerfile for all services)
@@ -342,6 +402,7 @@ quickbite/
 │   └── smoke-test.sh
 ├── grpc-contracts/           (.proto files + generated stubs)
 ├── messaging/                (transactional outbox, inbox, Kafka retries/DLT; shared by the services)
+├── security/                 (JWT validation, Keycloak roles, CurrentUser; shared by the services)
 ├── api-gateway/              (Spring Cloud Gateway)
 ├── restaurant-service/       (Spring Boot + gRPC server)
 ├── order-service/            (Spring Boot + gRPC client)

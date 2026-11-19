@@ -37,16 +37,22 @@ public class CustomerController {
     private final OrderHistoryService orderHistoryService;
 
     @PostMapping
-    @Operation(summary = "Register a new customer")
+    @Operation(summary = "Create the caller's customer profile (role customer; one per account)")
     public ResponseEntity<CustomerResponse> register(@Valid @RequestBody CustomerRequest request) {
         CustomerResponse response = customerService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
-    @Operation(summary = "List all active customers")
+    @Operation(summary = "List all active customers (admin)")
     public ResponseEntity<List<CustomerResponse>> listAll() {
         return ResponseEntity.ok(customerService.listAll());
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "The caller's own customer profile")
+    public ResponseEntity<CustomerResponse> me() {
+        return ResponseEntity.ok(customerService.getMine());
     }
 
     @GetMapping("/{id}")

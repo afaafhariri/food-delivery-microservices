@@ -1,6 +1,6 @@
 # Production: images from GitHub Container Registry (built by
-# .github/workflows/images.yml), the password from a git-ignored file,
-# an Ingress with TLS, and network policies.
+# .github/workflows/images.yml), passwords from a git-ignored file,
+# an Ingress with TLS (API + Keycloak login pages), and network policies.
 #
 #   cp k8s/overlays/prod/secrets.env.example k8s/overlays/prod/secrets.env   # then set a real password
 #   kubectl apply -k k8s/overlays/prod
@@ -14,9 +14,19 @@ resources:
   - ingress.yaml
   - network-policy.yaml
 
-# Prometheus, Tempo and Grafana; also turns on trace export in every service.
 components:
+  # Prometheus, Tempo and Grafana; also turns on trace export in every service.
   - ../../../observability
+  # Keycloak (realm without users: create them in the admin console).
+  - ../../../keycloak
+
+# The public Keycloak URL: tokens are issued for it and the services only accept those.
+# Same host as in ingress.yaml.
+configMapGenerator:
+  - name: quickbite-common
+    behavior: merge
+    literals:
+      - AUTH_PUBLIC_URL=https://quickbite.example.com/auth
 
 secretGenerator:
   - name: quickbite-db
@@ -48,6 +58,9 @@ patches:
   # Remove this once you pin sha-<commit> tags above.
   - target:
       kind: Deployment
+      # Only the QuickBite services (containers named "app"): a strategic-merge patch on any
+      # other Deployment would add an empty "app" container to it.
+      labelSelector: app.kubernetes.io/component in (backend,gateway)
     patch: |-
       apiVersion: apps/v1
       kind: Deployment

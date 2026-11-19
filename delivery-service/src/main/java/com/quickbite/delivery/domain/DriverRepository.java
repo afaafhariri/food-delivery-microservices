@@ -13,6 +13,10 @@ public interface DriverRepository extends JpaRepository<Driver, UUID> {
 
     List<Driver> findByAvailableOrderByCreatedAtAsc(boolean available);
 
+    Optional<Driver> findByUserId(String userId);
+
+    boolean existsByUserId(String userId);
+
     /**
      * Claims the longest-registered free driver. {@code SKIP LOCKED} lets concurrent
      * assignments pick different drivers instead of racing for (or blocking on) the same row.

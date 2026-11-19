@@ -1,0 +1,11 @@
+# Development only: replaces the realm with one that also contains test users
+# (admin, customer1, customer2, restaurant1, driver1; password quickbite123).
+# Included by k8s/overlays/local after ../../../keycloak. Never include it in production.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+configMapGenerator:
+  - name: keycloak-realm
+    behavior: replace
+    files:
+      - quickbite-realm.json

@@ -29,4 +29,7 @@ message ResolveCustomerResponse {
   string email = 3;
   // Formatted single-line address; empty when no address_id was requested.
   string delivery_address = 4;
+  // Keycloak user id of the account that owns the profile; empty for admin-managed profiles.
+  // order-service uses it to check that customers only order for themselves.
+  string user_id = 5;
 }
