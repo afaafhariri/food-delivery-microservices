@@ -12,3 +12,6 @@ k8s/overlays/prod/secrets.env
 
 # Generated on the cloud VM by k8s/vm/deploy.sh
 k8s/overlays/cloud/
+
+# Handbook source: kept locally only; the published PDF is docs/*.pdf
+docs/handbook/
