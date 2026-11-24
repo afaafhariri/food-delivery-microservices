@@ -48,6 +48,7 @@ Needs Docker Desktop with about **4 GB** of memory, plus `curl` and `jq` for the
 docker compose up --build -d          # first build takes a few minutes
 docker compose ps                     # wait until everything is healthy (Keycloak ~1 min)
 scripts/smoke-test.sh                 # end-to-end test: login, ordering, gRPC, Kafka, permissions
+k6 run scripts/load-test.js           # optional load test: p50/p95/p99 latency per endpoint (brew install k6)
 ```
 
 | URL | What |
