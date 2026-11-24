@@ -1,9 +1,9 @@
-# QuickBite — Food Delivery Microservices Platform
+# QuickBite — Cloud-native Food Delivery System 
 
-A microservices backend for a food delivery platform, built for the **IT4020 — Modern Topics in IT** module at SLIIT.
+A microservices backend for a food delivery platform.
 
-**[Read the QuickBite Handbook (PDF)](docs/QuickBite-Microservices-and-Cloud-Native-Handbook.pdf)**: the project's
-full report and a beginner's guide to microservices, Kubernetes and cloud native: every service, design decision and
+**[Read the QuickBite Handbook (PDF)](docs/QuickBite-Microservices-and-Cloud-Native-Handbook.pdf)**: the complete
+reference for the project and a beginner's guide to microservices, Kubernetes and cloud native: every service, design decision and
 setting explained, and how to run it all with or without Docker.
 
 ## Architecture
@@ -48,6 +48,7 @@ Needs Docker Desktop with about **4 GB** of memory, plus `curl` and `jq` for the
 docker compose up --build -d          # first build takes a few minutes
 docker compose ps                     # wait until everything is healthy (Keycloak ~1 min)
 scripts/smoke-test.sh                 # end-to-end test: login, ordering, gRPC, Kafka, permissions
+k6 run scripts/load-test.js           # optional load test: p50/p95/p99 latency per endpoint (brew install k6)
 ```
 
 | URL | What |

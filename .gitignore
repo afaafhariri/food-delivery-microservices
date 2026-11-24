@@ -15,3 +15,5 @@ k8s/overlays/cloud/
 
 # Handbook source: kept locally only; the published PDF is docs/*.pdf
 docs/handbook/
+
+load-result.json

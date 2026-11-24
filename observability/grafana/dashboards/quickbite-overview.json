@@ -238,6 +238,158 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "p99 latency",
+      "id": 21,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "The slowest 1% of requests take at least this long. Dots are exemplars: click one to open the trace in Tempo.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\"$application\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "{{application}}",
+          "refId": "A",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Gateway latency percentiles",
+      "id": 22,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "What callers see at the API gateway, all routes together. The gap between p50 and p99 is the tail.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"api-gateway\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.9, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"api-gateway\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p90",
+          "refId": "B",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"api-gateway\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "C",
+          "exemplar": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"api-gateway\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "refId": "D",
+          "exemplar": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.999, sum by (le) (rate(http_server_requests_seconds_bucket{application=\"api-gateway\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p99.9",
+          "refId": "E",
+          "exemplar": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
       "type": "row",
       "title": "Resilience (circuit breakers, gRPC)",
       "id": 5,
@@ -246,7 +398,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "panels": []
     },
@@ -263,7 +415,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 10
+        "y": 18
       },
       "targets": [
         {
@@ -272,7 +424,7 @@
             "uid": "prometheus"
           },
           "expr": "max by (application, name) (resilience4j_circuitbreaker_state{application=~\"$application\",state=\"open\"}) * 2 + max by (application, name) (resilience4j_circuitbreaker_state{application=~\"$application\",state=\"half_open\"})",
-          "legendFormat": "{{application}} \u2192 {{name}}",
+          "legendFormat": "{{application}} → {{name}}",
           "refId": "A",
           "instant": true
         }
@@ -352,7 +504,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 10
+        "y": 18
       },
       "targets": [
         {
@@ -361,7 +513,7 @@
             "uid": "prometheus"
           },
           "expr": "max by (application, name) (resilience4j_circuitbreaker_failure_rate{application=~\"$application\"})",
-          "legendFormat": "{{application}} \u2192 {{name}}",
+          "legendFormat": "{{application}} → {{name}}",
           "refId": "A",
           "exemplar": true
         }
@@ -407,7 +559,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 10
+        "y": 18
       },
       "targets": [
         {
@@ -416,7 +568,7 @@
             "uid": "prometheus"
           },
           "expr": "sum by (application, name) (rate(resilience4j_circuitbreaker_not_permitted_calls_total{application=~\"$application\"}[$__rate_interval]))",
-          "legendFormat": "{{application}} \u2192 {{name}}",
+          "legendFormat": "{{application}} → {{name}}",
           "refId": "A",
           "exemplar": true
         }
@@ -458,12 +610,12 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "order-service \u2192 restaurant-service / customer-service.",
+      "description": "order-service → restaurant-service / customer-service.",
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 26
       },
       "targets": [
         {
@@ -519,7 +671,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 26
       },
       "targets": [
         {
@@ -571,7 +723,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "panels": []
     },
@@ -588,7 +740,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "targets": [
         {
@@ -644,7 +796,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 27
+        "y": 35
       },
       "targets": [
         {
@@ -700,7 +852,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 27
+        "y": 35
       },
       "targets": [
         {
@@ -766,7 +918,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 43
       },
       "targets": [
         {
@@ -822,7 +974,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 35
+        "y": 43
       },
       "targets": [
         {
@@ -874,7 +1026,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 51
       },
       "panels": []
     },
@@ -891,7 +1043,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 52
       },
       "targets": [
         {
@@ -947,7 +1099,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 44
+        "y": 52
       },
       "targets": [
         {
@@ -1003,7 +1155,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 44
+        "y": 52
       },
       "targets": [
         {
