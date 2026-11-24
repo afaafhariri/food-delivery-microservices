@@ -1,9 +1,9 @@
-# QuickBite — Food Delivery Microservices Platform
+# QuickBite — Cloud-native Food Delivery System 
 
-A microservices backend for a food delivery platform, built for the **IT4020 — Modern Topics in IT** module at SLIIT.
+A microservices backend for a food delivery platform.
 
-**[Read the QuickBite Handbook (PDF)](docs/QuickBite-Microservices-and-Cloud-Native-Handbook.pdf)**: the project's
-full report and a beginner's guide to microservices, Kubernetes and cloud native: every service, design decision and
+**[Read the QuickBite Handbook (PDF)](docs/QuickBite-Microservices-and-Cloud-Native-Handbook.pdf)**: the complete
+reference for the project and a beginner's guide to microservices, Kubernetes and cloud native: every service, design decision and
 setting explained, and how to run it all with or without Docker.
 
 ## Architecture
