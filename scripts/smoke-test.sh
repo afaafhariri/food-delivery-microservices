@@ -3,7 +3,8 @@
 #   Keycloak login -> REST -> order-service -> gRPC (restaurant + customer, caller's token
 #   forwarded) -> Postgres -> Kafka -> delivery-service (driver assignment) -> Kafka ->
 #   order-service (status sync); the restaurant accepts one order and rejects another (which
-#   cancels it and frees the driver); a customer cancellation frees the driver; every role is
+#   cancels it and frees the driver); a customer cancellation frees the driver; an order placed
+#   while every driver is busy waits and gets the next driver who becomes free; every role is
 #   refused where it should be (401 without a token, 403 for someone else's data).
 #
 # Usage: scripts/smoke-test.sh [gateway-url]          (requires curl + jq)
@@ -13,6 +14,8 @@
 #   KEYCLOAK_URL     default http://localhost:8180/auth for a localhost gateway, else https://<host>/auth
 #   SMOKE_PASSWORD   default quickbite123
 # Safe to run repeatedly: customer1 and driver1 keep the profiles they created on the first run.
+# Step 8 briefly marks every free driver unavailable; they are made available again even if the
+# script fails or is interrupted.
 set -euo pipefail
 
 GW="${1:-http://localhost:8080}"
@@ -257,7 +260,60 @@ as admin
 wait_for "/api/deliveries/order/$order3" .status CANCELLED "delivery-service cancelled its delivery"
 wait_for "/api/drivers?available=true" "map(select(.id == \"$driver3\")) | length" 1 "that driver is available again"
 
-step "8. REST contract and access rules"
+step "8. No free driver: the order waits and gets the next driver who becomes free"
+# Park every free driver (driver1 included) so the next order finds nobody.
+parked=()
+restore_parked() { # make the parked drivers (not driver1) available again; also runs on exit
+  local id
+  for id in ${parked[@]+"${parked[@]}"}; do
+    curl -sS -o /dev/null -X PUT "$GW/api/drivers/$id" -H "Authorization: Bearer $TOKEN_admin" \
+      -H 'Content-Type: application/json' -d '{"available":true}' || true
+  done
+  parked=()
+}
+trap restore_parked EXIT
+as admin
+call GET "/api/drivers?available=true"
+for id in $(jq -r '.[].id' <<<"$body"); do
+  call PUT "/api/drivers/$id" '{"available":false}'
+  if [[ "$id" != "$driver1" ]]; then parked+=("$id"); fi
+done
+call PUT "/api/drivers/$driver1" '{"available":false}'
+call GET "/api/drivers?available=true"
+[[ "$(jq length <<<"$body")" == "0" ]] && ok "no driver is free (${#parked[@]} others parked)" || bad "drivers still free: $body"
+as customer1
+call POST /api/orders '{"customer_id":"'"$customer"'","restaurant_id":"'"$restaurant"'","address_id":"'"$address"'","items":[{"menu_item_id":"'"$kottu"'","quantity":1}]}'
+expect 201 "place a fourth order"
+order4=$(jq -r .id <<<"$body")
+as admin
+wait_for /api/deliveries/waiting "map(select(.order_id == \"$order4\")) | length" 1 "delivery-service put it on the waiting list"
+call GET "/api/deliveries/order/$order4"
+expect 404 "it has no delivery yet"
+call GET /api/deliveries/waiting
+ahead=$(jq --arg o "$order4" 'map(.order_id) | index($o)' <<<"$body")
+as driver1
+call GET /api/deliveries/waiting
+expect 403 "only admins see the waiting list"
+call PUT "/api/drivers/$driver1" '{"available":true}'
+expect 200 "driver1 comes back on duty"
+as admin
+if [[ "$ahead" == "0" ]]; then
+  wait_for "/api/deliveries/order/$order4" .driver_id "$driver1" "the waiting order went to driver1"
+else
+  # Older waiting orders (left by an earlier run or a load test) are served first.
+  printf '    %s older order(s) were waiting; freeing the parked drivers too\n' "$ahead"
+  restore_parked
+  wait_for "/api/deliveries/order/$order4" .status ASSIGNED "the waiting order got a driver"
+fi
+wait_for /api/deliveries/waiting "map(select(.order_id == \"$order4\")) | length" 0 "and left the waiting list"
+restore_parked
+as customer1
+call DELETE "/api/orders/$order4"
+expect 200 "cancel the fourth order (frees its driver again)"
+as admin
+wait_for "/api/deliveries/order/$order4" .status CANCELLED "delivery-service cancelled its delivery"
+
+step "9. REST contract and access rules"
 as customer1
 call GET "/api/orders?customer_id=$customer&page=1&size=100"
 expect 200 "list orders"

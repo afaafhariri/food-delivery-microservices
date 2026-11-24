@@ -6,6 +6,7 @@ import com.quickbite.delivery.domain.DeliveryRepository;
 import com.quickbite.delivery.domain.DeliveryStatus;
 import com.quickbite.delivery.domain.Driver;
 import com.quickbite.delivery.domain.DriverRepository;
+import com.quickbite.delivery.domain.WaitingOrderRepository;
 import com.quickbite.security.CurrentUser;
 import com.quickbite.security.KeycloakJwtConverter;
 import org.junit.jupiter.api.AfterEach;
@@ -30,7 +31,8 @@ class DeliveryAuthorizationTest {
 
     private final DeliveryRepository deliveries = mock(DeliveryRepository.class);
     private final DeliveryService service = new DeliveryService(deliveries, mock(DriverRepository.class),
-            mock(CancelledOrderRepository.class), mock(ApplicationEventPublisher.class), new CurrentUser());
+            mock(CancelledOrderRepository.class), mock(WaitingOrderRepository.class), mock(ApplicationEventPublisher.class),
+            new CurrentUser());
 
     @AfterEach
     void signOut() {

@@ -77,6 +77,12 @@ management:
   # is set (Compose and the Kubernetes observability component set it), so local runs
   # without a tracing backend stay quiet.
 
+quickbite:
+  delivery:
+    # How often each instance looks for waiting orders that a free driver could take. Freeing a
+    # driver already triggers an immediate try; this sweep is the safety net.
+    waiting-sweep-interval: ${DELIVERY_WAITING_SWEEP_INTERVAL:30s}
+
 springdoc:
   api-docs:
     path: /api-docs
