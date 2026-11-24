@@ -9,6 +9,7 @@ import com.quickbite.delivery.web.ApiException;
 import com.quickbite.security.CurrentUser;
 import com.quickbite.security.Roles;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import java.util.UUID;
 /**
  * Driver profiles. A profile belongs to the Keycloak account that registered it ({@code user_id});
  * each driver account has at most one. Drivers see and change only their own profile; admins all.
+ * A driver who is registered or set available may be given a waiting order at once.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,6 +29,7 @@ public class DriverService {
 
     private final DriverRepository drivers;
     private final CurrentUser currentUser;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public DriverResponse register(CreateDriverRequest request) {
@@ -43,7 +46,9 @@ public class DriverService {
         driver.setVehicleType(request.vehicleType().strip());
         driver.setUserId(userId);
         driver.setAvailable(true);
-        return toResponse(drivers.saveAndFlush(driver));
+        Driver saved = drivers.saveAndFlush(driver);
+        events.publishEvent(new RetryWaitingOrders("driver " + saved.getId() + " registered"));
+        return toResponse(saved);
     }
 
     /** The caller's own driver profile. */
@@ -78,10 +83,15 @@ public class DriverService {
         if (hasText(request.vehicleType())) {
             driver.setVehicleType(request.vehicleType().strip());
         }
+        boolean becameAvailable = Boolean.TRUE.equals(request.available()) && !driver.isAvailable();
         if (request.available() != null) {
             driver.setAvailable(request.available());
         }
-        return toResponse(drivers.saveAndFlush(driver));
+        Driver saved = drivers.saveAndFlush(driver);
+        if (becameAvailable) {
+            events.publishEvent(new RetryWaitingOrders("driver " + id + " set available"));
+        }
+        return toResponse(saved);
     }
 
     private static boolean hasText(String value) {

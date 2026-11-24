@@ -7,6 +7,7 @@ import com.quickbite.delivery.domain.DeliveryRepository;
 import com.quickbite.delivery.domain.DeliveryStatus;
 import com.quickbite.delivery.domain.Driver;
 import com.quickbite.delivery.domain.DriverRepository;
+import com.quickbite.delivery.domain.WaitingOrderRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -26,8 +27,9 @@ class DeliveryCancellationTest {
     private final DeliveryRepository deliveries = mock(DeliveryRepository.class);
     private final DriverRepository drivers = mock(DriverRepository.class);
     private final CancelledOrderRepository cancelledOrders = mock(CancelledOrderRepository.class);
+    private final WaitingOrderRepository waitingOrders = mock(WaitingOrderRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    private final DeliveryService service = new DeliveryService(deliveries, drivers, cancelledOrders, events,
+    private final DeliveryService service = new DeliveryService(deliveries, drivers, cancelledOrders, waitingOrders, events,
             mock(com.quickbite.security.CurrentUser.class));   // Kafka handlers never consult the caller
 
     private final UUID orderId = UUID.randomUUID();

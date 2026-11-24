@@ -55,6 +55,11 @@ public final class DeliveryDtos {
             Instant updatedAt) {
     }
 
+    /** A placed order that is waiting for a free driver. */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record WaitingOrderResponse(UUID orderId, Instant waitingSince) {
+    }
+
     public record UpdateDeliveryStatusRequest(String status) {
     }
 

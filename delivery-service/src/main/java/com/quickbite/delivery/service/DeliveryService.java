@@ -7,7 +7,10 @@ import com.quickbite.delivery.domain.DeliveryRepository;
 import com.quickbite.delivery.domain.DeliveryStatus;
 import com.quickbite.delivery.domain.Driver;
 import com.quickbite.delivery.domain.DriverRepository;
+import com.quickbite.delivery.domain.WaitingOrder;
+import com.quickbite.delivery.domain.WaitingOrderRepository;
 import com.quickbite.delivery.dto.DeliveryDtos.DeliveryResponse;
+import com.quickbite.delivery.dto.DeliveryDtos.WaitingOrderResponse;
 import com.quickbite.delivery.web.ApiException;
 import com.quickbite.security.CurrentUser;
 import com.quickbite.security.Roles;
@@ -20,6 +23,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -35,12 +39,15 @@ public class DeliveryService {
     private final DeliveryRepository deliveries;
     private final DriverRepository drivers;
     private final CancelledOrderRepository cancelledOrders;
+    private final WaitingOrderRepository waitingOrders;
     private final ApplicationEventPublisher events;
     private final CurrentUser currentUser;
 
     /**
      * Creates the delivery for a newly placed order. Idempotent on {@code orderId}, so Kafka
      * redeliveries are harmless; driver claiming is race-free ({@code FOR UPDATE SKIP LOCKED}).
+     * If every driver is busy the order goes on the waiting list instead, and gets the next
+     * driver that becomes free ({@link #assignOldestWaiting()}).
      */
     @Transactional
     public Optional<Delivery> assign(UUID orderId) {
@@ -54,10 +61,59 @@ public class DeliveryService {
         }
         Optional<Driver> next = drivers.lockNextAvailable();
         if (next.isEmpty()) {
-            log.warn("no available driver for order {}", orderId);
+            waitingOrders.enqueue(orderId);
+            // A driver freed while this transaction runs cannot see the new row yet, so look
+            // again once it commits (see WaitingOrderDispatcher).
+            events.publishEvent(new RetryWaitingOrders("order " + orderId + " is waiting"));
+            log.warn("no available driver for order {}, it waits for the next free one", orderId);
             return Optional.empty();
         }
-        Driver driver = next.get();
+        return Optional.of(createDelivery(orderId, next.get()));
+    }
+
+    /**
+     * Gives the longest-waiting order a free driver, in a transaction of its own. Both are
+     * claimed with {@code FOR UPDATE SKIP LOCKED}, so instances running this at the same time
+     * take different orders and different drivers; the unique {@code deliveries.order_id}
+     * stops an order from ever getting two deliveries.
+     *
+     * @return true if the waiting list changed (an order was assigned, or dropped because it was
+     *         cancelled or already has a delivery), so calling again may do more; false if no
+     *         order is waiting or no driver is free
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean assignOldestWaiting() {
+        Optional<WaitingOrder> oldest = waitingOrders.lockOldest();
+        if (oldest.isEmpty()) {
+            return false;
+        }
+        UUID orderId = oldest.get().getOrderId();
+        if (cancelledOrders.existsById(orderId) || deliveries.existsByOrderId(orderId)) {
+            waitingOrders.remove(orderId);
+            log.info("order {} no longer needs a driver, removed from the waiting list", orderId);
+            return true;
+        }
+        Optional<Driver> next = drivers.lockNextAvailable();
+        if (next.isEmpty()) {
+            return false;
+        }
+        waitingOrders.remove(orderId);
+        createDelivery(orderId, next.get());
+        return true;
+    }
+
+    /** The orders waiting for a driver, oldest first (admins only). */
+    @Transactional(readOnly = true)
+    public List<WaitingOrderResponse> waiting() {
+        if (!currentUser.isAdmin()) {
+            throw new AccessDeniedException("only admins can list waiting orders");
+        }
+        return waitingOrders.findAllByOrderByWaitingSinceAscOrderIdAsc().stream()
+                .map(w -> new WaitingOrderResponse(w.getOrderId(), w.getWaitingSince()))
+                .toList();
+    }
+
+    private Delivery createDelivery(UUID orderId, Driver driver) {
         driver.setAvailable(false);
 
         Delivery delivery = new Delivery();
@@ -69,18 +125,24 @@ public class DeliveryService {
         events.publishEvent(new DeliveryStatusChanged(delivery.getId(), orderId, driver.getId(),
                 DeliveryStatus.ASSIGNED.name()));
         log.info("delivery {} assigned order={} driver={}", delivery.getId(), orderId, driver.getId());
-        return Optional.of(delivery);
+        return delivery;
     }
 
     /**
      * Handles {@code order.cancelled}. An ASSIGNED delivery is cancelled and its driver freed
      * (announced as {@code delivery.status.updated} CANCELLED). A delivery that is already
-     * picked up, en route or delivered is left alone: the food is on its way. Idempotent.
+     * picked up, en route or delivered is left alone: the food is on its way. An order still
+     * waiting for a driver leaves the waiting list. Idempotent.
      */
     @Transactional
     public void cancelForOrder(UUID orderId) {
         if (!cancelledOrders.existsById(orderId)) {
             cancelledOrders.save(new CancelledOrder(orderId));
+        }
+        // Before looking for the delivery: if assignOldestWaiting() has this order claimed, the
+        // delete waits for it to commit, and the lookup below then finds the new delivery.
+        if (waitingOrders.remove(orderId) > 0) {
+            log.info("order {} cancelled while waiting for a driver", orderId);
         }
         Optional<Delivery> found = deliveries.findByOrderId(orderId);
         if (found.isEmpty()) {
@@ -98,6 +160,9 @@ public class DeliveryService {
                 deliveries.saveAndFlush(delivery);
                 events.publishEvent(new DeliveryStatusChanged(delivery.getId(), orderId,
                         driver != null ? driver.getId() : null, DeliveryStatus.CANCELLED.name()));
+                if (driver != null) {
+                    events.publishEvent(new RetryWaitingOrders("driver " + driver.getId() + " freed by a cancellation"));
+                }
                 log.info("delivery {} cancelled with order {}, driver {} is available again", delivery.getId(),
                         orderId, driver != null ? driver.getId() : null);
             }
@@ -175,13 +240,17 @@ public class DeliveryService {
 
         delivery.setStatus(status);
         Driver driver = delivery.getDriver();
-        if ((status == DeliveryStatus.DELIVERED || status == DeliveryStatus.CANCELLED) && driver != null) {
+        boolean freesDriver = (status == DeliveryStatus.DELIVERED || status == DeliveryStatus.CANCELLED) && driver != null;
+        if (freesDriver) {
             driver.setAvailable(true);
         }
         deliveries.saveAndFlush(delivery);
 
         events.publishEvent(new DeliveryStatusChanged(delivery.getId(), delivery.getOrderId(),
                 driver != null ? driver.getId() : null, status.name()));
+        if (freesDriver) {
+            events.publishEvent(new RetryWaitingOrders("driver " + driver.getId() + " freed: delivery " + status));
+        }
         return toResponse(delivery);
     }
 

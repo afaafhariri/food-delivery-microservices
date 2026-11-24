@@ -2,6 +2,7 @@ package com.quickbite.delivery.web;
 
 import com.quickbite.delivery.dto.DeliveryDtos.DeliveryResponse;
 import com.quickbite.delivery.dto.DeliveryDtos.UpdateDeliveryStatusRequest;
+import com.quickbite.delivery.dto.DeliveryDtos.WaitingOrderResponse;
 import com.quickbite.delivery.service.DeliveryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,6 +32,12 @@ public class DeliveryController {
             @RequestParam(name = "driver_id", required = false) UUID driverId,
             @RequestParam(required = false) String status) {
         return deliveries.list(driverId, status);
+    }
+
+    @GetMapping("/waiting")
+    @Operation(summary = "List the orders waiting for a free driver, oldest first (admins only)")
+    public List<WaitingOrderResponse> waiting() {
+        return deliveries.waiting();
     }
 
     @GetMapping("/{id}")
