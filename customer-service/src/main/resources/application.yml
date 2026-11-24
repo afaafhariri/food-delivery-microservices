@@ -11,6 +11,12 @@ spring:
     server:
       port: ${GRPC_PORT:9094}
       shutdown-grace-period: 10s
+      # Close each client connection after 5 minutes (calls in flight get 30 s to finish). The
+      # client reconnects and looks the service up in DNS again, so a copy added by scaling up
+      # starts receiving calls within minutes instead of never.
+      keep-alive:
+        max-age: 5m
+        max-age-grace: 30s
 
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/quickbite_customer_db}
