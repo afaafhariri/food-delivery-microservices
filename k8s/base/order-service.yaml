@@ -70,8 +70,9 @@ spec:
           env:
             - { name: SERVER_PORT, value: "8082" }
             - { name: SPRING_DATASOURCE_URL, value: "jdbc:postgresql://postgres:5432/quickbite_order_db?reWriteBatchedInserts=true" }
-            - { name: RESTAURANT_GRPC_ADDRESS, value: "static://restaurant-service:9091" }
-            - { name: CUSTOMER_GRPC_ADDRESS, value: "static://customer-service:9094" }
+            # Headless Services: DNS lists every pod, and the client balances calls across them.
+            - { name: RESTAURANT_GRPC_ADDRESS, value: "dns:///restaurant-service-grpc:9091" }
+            - { name: CUSTOMER_GRPC_ADDRESS, value: "dns:///customer-service-grpc:9094" }
             - { name: GRPC_DEADLINE, value: 2s }
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom:

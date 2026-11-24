@@ -15,7 +15,9 @@ import java.util.Map;
  * gRPC channels to restaurant-service and customer-service.
  * <p>
  * Channels are long-lived HTTP/2 connections (created lazily, closed by Spring on shutdown).
- * A service config adds transparent retries for {@code UNAVAILABLE}, e.g. while a peer restarts.
+ * The service config ({@link #serviceConfig}) spreads calls over every address the target
+ * resolves to ({@code round_robin}; in Kubernetes a headless Service lists every pod) and
+ * retries {@code UNAVAILABLE} transparently, e.g. while a peer restarts.
  * {@link BearerTokenForwarder} sends the caller's access token: the gRPC servers require one.
  * Per-call deadlines are applied by {@link com.quickbite.order.grpc.OrderValidationClient}.
  */
@@ -35,18 +37,29 @@ public class GrpcClientConfig {
     }
 
     private static ChannelBuilderOptions withRetries(String serviceName) {
-        // gRPC's service-config parser requires JSON-like types (numbers as Double).
+        Map<String, Object> serviceConfig = serviceConfig(serviceName);
+        return ChannelBuilderOptions.defaults()
+                .withCustomizer((name, builder) -> builder.enableRetry().defaultServiceConfig(serviceConfig)
+                        .intercept(new BearerTokenForwarder()));
+    }
+
+    /**
+     * The gRPC service config of a channel to {@code serviceName}: one connection to every
+     * address the target resolves to, calls taken in turn ({@code round_robin}; gRPC's own
+     * default, {@code pick_first}, would send them all to one), and up to 3 attempts on
+     * {@code UNAVAILABLE}. gRPC's parser requires JSON-like types (numbers as Double).
+     */
+    static Map<String, Object> serviceConfig(String serviceName) {
         Map<String, Object> retryPolicy = Map.of(
                 "maxAttempts", 3.0,
                 "initialBackoff", "0.05s",
                 "maxBackoff", "0.4s",
                 "backoffMultiplier", 2.0,
                 "retryableStatusCodes", List.of("UNAVAILABLE"));
-        Map<String, Object> serviceConfig = Map.of("methodConfig", List.of(Map.of(
-                "name", List.of(Map.of("service", serviceName)),
-                "retryPolicy", retryPolicy)));
-        return ChannelBuilderOptions.defaults()
-                .withCustomizer((name, builder) -> builder.enableRetry().defaultServiceConfig(serviceConfig)
-                        .intercept(new BearerTokenForwarder()));
+        return Map.of(
+                "loadBalancingConfig", List.of(Map.of("round_robin", Map.of())),
+                "methodConfig", List.of(Map.of(
+                        "name", List.of(Map.of("service", serviceName)),
+                        "retryPolicy", retryPolicy)));
     }
 }

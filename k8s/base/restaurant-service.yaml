@@ -12,6 +12,21 @@ spec:
     - name: http
       port: 8081
       targetPort: http
+---
+# gRPC goes through a headless Service: DNS returns every ready pod's IP, and order-service
+# spreads calls over all of them (round_robin). A normal ClusterIP Service would balance only
+# connections, and gRPC keeps a single connection open, so every call would reach one pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: restaurant-service-grpc
+  labels:
+    app.kubernetes.io/name: restaurant-service
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: restaurant-service
+  ports:
     - name: grpc
       port: 9091
       targetPort: grpc
